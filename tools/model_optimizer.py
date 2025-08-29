@@ -53,16 +53,16 @@ class ModelOptimizer:
         self._load_model()
 
     def _generate_session_id(self):
-        """Generate unique session ID based on timestamp and config"""
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        config_hash = hashlib.md5(str(self.config_path).encode()).hexdigest()[:8]
-        return f"{timestamp}_{config_hash}"
+        """Generate simple session ID based on date only"""
+        # Use date only for cleaner naming
+        date = datetime.now().strftime("%Y%m%d")
+        return date
 
     def _get_model_filename(self, model_type, extension):
-        """Generate unique filename for model that includes original model name"""
+        """Generate clean filename for model that includes original model name"""
         # Extract base name from checkpoint filename (remove .pth extension)
         base_name = Path(self.checkpoint_path).stem
-        return f"{base_name}_{model_type}_{self.session_id}.{extension}"
+        return f"{base_name}_{model_type}.{extension}"
 
     def _save_benchmark_results(self, results, filename):
         """Save benchmark results to JSON and CSV"""
@@ -86,14 +86,13 @@ class ModelOptimizer:
 
     def _log_optimization_summary(self, results):
         """Log optimization summary to file"""
-        summary_path = self.model_dir / f"optimization_summary_{self.session_id}.txt"
+        summary_path = self.model_dir / f"optimization_summary.txt"
 
         with open(summary_path, 'w') as f:
             f.write("="*80 + "\n")
             f.write("MODEL OPTIMIZATION SUMMARY\n")
             f.write("="*80 + "\n\n")
-            f.write(f"Session ID: {self.session_id}\n")
-            f.write(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Date: {datetime.now().strftime('%Y-%m-%d')}\n")
             f.write(f"Config: {self.config_path}\n")
             f.write(f"Checkpoint: {self.checkpoint_path.name}\n")
             f.write(f"Device: {self.device}\n\n")
@@ -118,11 +117,11 @@ class ModelOptimizer:
             for name in self.optimized_models.keys():
                 base_name = Path(self.checkpoint_path).stem
                 if name in ['fp16', 'int8']:
-                    filename = f"{base_name}_{name}_{self.session_id}.pth"
+                    filename = self._get_model_filename(name, 'pth')
                     f.write(f"  - {filename}\n")
                 elif name == 'onnx':
-                    onnx_filename = f"{base_name}_onnx_{self.session_id}.onnx"
-                    optimized_filename = f"{base_name}_onnx_optimized_{self.session_id}.onnx"
+                    onnx_filename = self._get_model_filename('onnx', 'onnx')
+                    optimized_filename = self._get_model_filename('onnx_optimized', 'onnx')
                     f.write(f"  - {onnx_filename}\n")
                     f.write(f"  - {optimized_filename}\n")
 
@@ -397,10 +396,12 @@ class ModelOptimizer:
 
         # Save individual benchmark results
         for name, metrics in results.items():
-            self._save_benchmark_results(metrics, f"benchmark_{name}_{self.session_id}")
+            base_name = Path(self.checkpoint_path).stem
+            self._save_benchmark_results(metrics, f"benchmark_{base_name}_{name}")
 
         # Save comparison results
-        self._save_benchmark_results(results, f"comparison_{self.session_id}")
+        base_name = Path(self.checkpoint_path).stem
+        self._save_benchmark_results(results, f"comparison_{base_name}")
 
         # Log optimization summary
         self._log_optimization_summary(results)

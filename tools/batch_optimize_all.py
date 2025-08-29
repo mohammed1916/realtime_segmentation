@@ -8,6 +8,7 @@ import sys
 import os
 import glob
 from pathlib import Path
+from datetime import datetime
 
 # Add the tools directory to the Python path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -71,13 +72,21 @@ def optimize_all_models():
         config_path = model_config_map[model_name]
         print(f"📋 Using config: {config_path}")
 
+        # Create timestamp-based subdirectory for this model
+        model_base_name = Path(pth_file).stem  # Remove .pth extension
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        unique_model_dir = f"{timestamp}_{i:06d}"  # timestamp + unique number
+        output_dir = Path('optimized_models') / model_base_name / unique_model_dir
+        
+        print(f"📁 Output directory: {output_dir}")
+
         try:
-            # Initialize optimizer
+            # Initialize optimizer with unique directory
             optimizer = ModelOptimizer(
                 config_path=config_path,
                 checkpoint_path=pth_file,
                 device='cuda:0',
-                output_dir='optimized_models'
+                output_dir=str(output_dir)
             )
 
             # Apply optimizations
@@ -132,11 +141,11 @@ def optimize_all_models():
 
     if successful_optimizations > 0:
         print("📁 Optimized models saved to: optimized_models/")
-        print("📋 Each model has its own subdirectory with:")
-        print("   - FP16 and INT8 optimized .pth files")
-        print("   - ONNX models (.onnx files)")
-        print("   - Benchmark results and performance comparisons")
-        print("   - Optimization summaries")
+        print("📋 Each model has its own directory with timestamp-based subdirectories:")
+        print("   - Format: {model_name}/{timestamp}_{number:06d}/")
+        print("   - Example: segformer.b0.1024x1024.city.160k/20250829_215300_000001/")
+        print("   - Contains: FP16, INT8 .pth files, ONNX models, benchmarks")
+        print("   - Each subdirectory represents a unique optimization run")
 
     print("\n🎉 Batch optimization complete!")
 

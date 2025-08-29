@@ -67,7 +67,7 @@ def benchmark_single_model(checkpoint_path, config_path, device='cuda:0', output
 
         # Save results with checkpoint filename
         checkpoint_name = Path(checkpoint_path).stem
-        optimizer._save_benchmark_results(results, f"benchmark_{checkpoint_name}_{optimizer.session_id}")
+        optimizer._save_benchmark_results(results, f"benchmark_{checkpoint_name}_original")
 
         print(".2f")
         print(".1f")
