@@ -42,9 +42,16 @@ class ModelOptimizer:
         self.optimized_models = {}
         self.session_id = self._generate_session_id()
 
+        # Create model-specific directory
+        self.model_base_name = Path(self.checkpoint_filename).stem
+        self.model_dir = self.output_dir / self.model_base_name
+        self.model_benchmarks_dir = self.model_dir / "benchmarks"
+
         # Create directories
         self.output_dir.mkdir(exist_ok=True)
         self.benchmarks_dir.mkdir(exist_ok=True)
+        self.model_dir.mkdir(exist_ok=True)
+        self.model_benchmarks_dir.mkdir(exist_ok=True)
 
         # Load original model
         self._load_original_model()
@@ -56,8 +63,10 @@ class ModelOptimizer:
         return f"{timestamp}_{config_hash}"
 
     def _get_model_filename(self, model_type, extension):
-        """Generate unique filename for model"""
-        return f"{model_type}_{self.session_id}.{extension}"
+        """Generate unique filename for model that includes original model name"""
+        # Extract base name from checkpoint filename (remove .pth extension)
+        base_name = Path(self.checkpoint_filename).stem
+        return f"{base_name}_{model_type}_{self.session_id}.{extension}"
 
     def _save_benchmark_results(self, results, filename):
         """Save benchmark results to JSON and CSV"""
@@ -67,12 +76,12 @@ class ModelOptimizer:
             results['checkpoint_filename'] = self.checkpoint_filename
 
         # Save JSON
-        json_path = self.benchmarks_dir / f"{filename}.json"
+        json_path = self.model_benchmarks_dir / f"{filename}.json"
         with open(json_path, 'w') as f:
             json.dump(results, f, indent=2, default=str)
 
         # Save CSV
-        csv_path = self.benchmarks_dir / f"{filename}.csv"
+        csv_path = self.model_benchmarks_dir / f"{filename}.csv"
         if isinstance(results, dict):
             with open(csv_path, 'w', newline='') as f:
                 writer = csv.DictWriter(f, fieldnames=results.keys())
@@ -81,7 +90,7 @@ class ModelOptimizer:
 
     def _log_optimization_summary(self, results):
         """Log optimization summary to file"""
-        summary_path = self.benchmarks_dir / f"optimization_summary_{self.session_id}.txt"
+        summary_path = self.model_benchmarks_dir / f"optimization_summary_{self.session_id}.txt"
 
         with open(summary_path, 'w') as f:
             f.write("="*80 + "\n")
@@ -111,11 +120,15 @@ class ModelOptimizer:
 
             f.write("GENERATED FILES:\n")
             for name in self.optimized_models.keys():
+                base_name = Path(self.checkpoint_filename).stem
                 if name in ['fp16', 'int8']:
-                    f.write(f"  - {self._get_model_filename(name, 'pth')}\n")
+                    filename = f"{base_name}_{name}_{self.session_id}.pth"
+                    f.write(f"  - {filename}\n")
                 elif name == 'onnx':
-                    f.write(f"  - {self._get_model_filename('onnx', 'onnx')}\n")
-                    f.write(f"  - {self._get_model_filename('onnx_optimized', 'onnx')}\n")
+                    onnx_filename = f"{base_name}_onnx_{self.session_id}.onnx"
+                    optimized_filename = f"{base_name}_onnx_optimized_{self.session_id}.onnx"
+                    f.write(f"  - {onnx_filename}\n")
+                    f.write(f"  - {optimized_filename}\n")
 
             f.write(f"\nBenchmark results saved to: {self.benchmarks_dir}\n")
 
@@ -197,7 +210,7 @@ class ModelOptimizer:
                 module.register_forward_hook(fp16_forward_hook)
 
         # Save FP16 model
-        fp16_path = self.output_dir / self._get_model_filename('fp16', 'pth')
+        fp16_path = self.model_dir / self._get_model_filename('fp16', 'pth')
         torch.save(model_fp16.state_dict(), fp16_path)
         print(f"FP16 model saved to: {fp16_path}")
 
@@ -218,7 +231,7 @@ class ModelOptimizer:
         )
 
         # Save INT8 model
-        int8_path = self.output_dir / self._get_model_filename('int8', 'pth')
+        int8_path = self.model_dir / self._get_model_filename('int8', 'pth')
         torch.save(model_int8.state_dict(), int8_path)
         print(f"INT8 model saved to: {int8_path}")
 
@@ -233,7 +246,7 @@ class ModelOptimizer:
             return None
 
         onnx_filename = self._get_model_filename('onnx', 'onnx')
-        onnx_path = self.output_dir / onnx_filename
+        onnx_path = self.model_dir / onnx_filename
         print(f"Converting model to ONNX format: {onnx_path}")
         assert self.original_model is not None, "Model not loaded"
 
@@ -271,7 +284,7 @@ class ModelOptimizer:
         import onnxruntime as ort  # type: ignore
 
         optimized_filename = self._get_model_filename('onnx_optimized', 'onnx')
-        optimized_path = self.output_dir / optimized_filename
+        optimized_path = self.model_dir / optimized_filename
 
         print("Optimizing ONNX model...")
 
@@ -450,17 +463,17 @@ def main():
 
     if 'tensorrt' in args.optimize or 'all' in args.optimize:
         onnx_filename = optimizer._get_model_filename('onnx', 'onnx')
-        onnx_path = optimizer.output_dir / onnx_filename
+        onnx_path = optimizer.model_dir / onnx_filename
         if onnx_path.exists():
             engine_filename = optimizer._get_model_filename('tensorrt', 'engine')
-            engine_path = optimizer.output_dir / engine_filename
+            engine_path = optimizer.model_dir / engine_filename
             optimizer.create_tensorrt_engine(onnx_path, engine_path, input_shape)
 
     # Compare all models
     optimizer.compare_optimizations(input_shape, args.num_runs)
 
-    print(f"\nOptimized models saved to: {optimizer.output_dir}")
-    print(f"Benchmark results saved to: {optimizer.benchmarks_dir}")
+    print(f"\nOptimized models saved to: {optimizer.model_dir}")
+    print(f"Benchmark results saved to: {optimizer.model_benchmarks_dir}")
     print(f"Session ID: {optimizer.session_id}")
     print("\nOptimization complete! 🚀")
 

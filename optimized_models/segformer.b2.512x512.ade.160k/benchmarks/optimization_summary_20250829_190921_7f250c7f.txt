@@ -1,0 +1,25 @@
+================================================================================
+MODEL OPTIMIZATION SUMMARY
+================================================================================
+
+Session ID: 20250829_190921_7f250c7f
+Timestamp: 2025-08-29 19:09:32
+Config: local_configs/segformer/segformer_mit-b2_8xb2-160k_ade20k-512x512.py
+Checkpoint: segformer.b2.512x512.ade.160k.pth
+Device: cuda:0
+
+PERFORMANCE COMPARISON:
+--------------------------------------------------------------------------------
+Model           Size (MB)  Time (ms)    FPS      Speedup   
+--------------------------------------------------------------------------------
+original        94.5       166.43       6.0      1.00      x
+fp16            47.2       76.37        13.1     2.18      x
+int8            94.5       136.01       7.4      1.22      x
+batch           94.5       121.79       8.2      1.37      x
+--------------------------------------------------------------------------------
+
+GENERATED FILES:
+  - segformer.b2.512x512.ade.160k_fp16_20250829_190921_7f250c7f.pth
+  - segformer.b2.512x512.ade.160k_int8_20250829_190921_7f250c7f.pth
+
+Benchmark results saved to: optimized_models\benchmarks
