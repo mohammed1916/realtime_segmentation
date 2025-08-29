@@ -32,29 +32,25 @@ except ImportError:
 
 class ModelOptimizer:
     def __init__(self, config_path, checkpoint_path, device='cuda:0', output_dir='optimized_models'):
-        self.config_path = config_path
-        self.checkpoint_path = checkpoint_path
-        self.checkpoint_filename = Path(checkpoint_path).name  # Store filename for logging
+        """Initialize the model optimizer"""
+        self.config_path = Path(config_path)
+        self.checkpoint_path = Path(checkpoint_path)
         self.device = device
-        self.output_dir = Path(output_dir)
-        self.benchmarks_dir = self.output_dir / "benchmarks"
+        self.session_id = self._generate_session_id()
+        
+        # Load original checkpoint to preserve metadata
+        self.original_checkpoint = torch.load(checkpoint_path, map_location='cpu')
+        self.original_meta = self.original_checkpoint.get('meta', {})
+        
+        # Create model directory
+        self.model_dir = Path(output_dir) / self.checkpoint_path.stem
+        self.model_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Load model
         self.original_model = None
         self.optimized_models = {}
-        self.session_id = self._generate_session_id()
-
-        # Create model-specific directory
-        self.model_base_name = Path(self.checkpoint_filename).stem
-        self.model_dir = self.output_dir / self.model_base_name
-        self.model_benchmarks_dir = self.model_dir / "benchmarks"
-
-        # Create directories
-        self.output_dir.mkdir(exist_ok=True)
-        self.benchmarks_dir.mkdir(exist_ok=True)
-        self.model_dir.mkdir(exist_ok=True)
-        self.model_benchmarks_dir.mkdir(exist_ok=True)
-
-        # Load original model
-        self._load_original_model()
+        
+        self._load_model()
 
     def _generate_session_id(self):
         """Generate unique session ID based on timestamp and config"""
@@ -65,7 +61,7 @@ class ModelOptimizer:
     def _get_model_filename(self, model_type, extension):
         """Generate unique filename for model that includes original model name"""
         # Extract base name from checkpoint filename (remove .pth extension)
-        base_name = Path(self.checkpoint_filename).stem
+        base_name = Path(self.checkpoint_path).stem
         return f"{base_name}_{model_type}_{self.session_id}.{extension}"
 
     def _save_benchmark_results(self, results, filename):
@@ -73,15 +69,15 @@ class ModelOptimizer:
         # Add checkpoint filename to results
         if isinstance(results, dict):
             results = dict(results)  # Create a copy
-            results['checkpoint_filename'] = self.checkpoint_filename
+            results['checkpoint_filename'] = self.checkpoint_path.name
 
         # Save JSON
-        json_path = self.model_benchmarks_dir / f"{filename}.json"
+        json_path = self.model_dir / f"{filename}.json"
         with open(json_path, 'w') as f:
             json.dump(results, f, indent=2, default=str)
 
         # Save CSV
-        csv_path = self.model_benchmarks_dir / f"{filename}.csv"
+        csv_path = self.model_dir / f"{filename}.csv"
         if isinstance(results, dict):
             with open(csv_path, 'w', newline='') as f:
                 writer = csv.DictWriter(f, fieldnames=results.keys())
@@ -90,7 +86,7 @@ class ModelOptimizer:
 
     def _log_optimization_summary(self, results):
         """Log optimization summary to file"""
-        summary_path = self.model_benchmarks_dir / f"optimization_summary_{self.session_id}.txt"
+        summary_path = self.model_dir / f"optimization_summary_{self.session_id}.txt"
 
         with open(summary_path, 'w') as f:
             f.write("="*80 + "\n")
@@ -99,7 +95,7 @@ class ModelOptimizer:
             f.write(f"Session ID: {self.session_id}\n")
             f.write(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"Config: {self.config_path}\n")
-            f.write(f"Checkpoint: {self.checkpoint_filename}\n")
+            f.write(f"Checkpoint: {self.checkpoint_path.name}\n")
             f.write(f"Device: {self.device}\n\n")
 
             f.write("PERFORMANCE COMPARISON:\n")
@@ -120,7 +116,7 @@ class ModelOptimizer:
 
             f.write("GENERATED FILES:\n")
             for name in self.optimized_models.keys():
-                base_name = Path(self.checkpoint_filename).stem
+                base_name = Path(self.checkpoint_path).stem
                 if name in ['fp16', 'int8']:
                     filename = f"{base_name}_{name}_{self.session_id}.pth"
                     f.write(f"  - {filename}\n")
@@ -130,16 +126,25 @@ class ModelOptimizer:
                     f.write(f"  - {onnx_filename}\n")
                     f.write(f"  - {optimized_filename}\n")
 
-            f.write(f"\nBenchmark results saved to: {self.benchmarks_dir}\n")
+            f.write(f"\nBenchmark results saved to: {self.model_dir}\n")
 
-    def _load_original_model(self):
+    def _load_model(self):
         """Load the original model"""
         from mmseg.apis import init_model
         print("Loading original model...")
-        self.original_model = init_model(self.config_path, self.checkpoint_path, device=self.device)
+        self.original_model = init_model(str(self.config_path), str(self.checkpoint_path), device=self.device)
         if self.original_model is None:
             raise ValueError("Failed to load model")
         print("Original model loaded successfully")
+
+    def _save_checkpoint_with_meta(self, state_dict, filename):
+        """Save checkpoint with preserved metadata"""
+        checkpoint = {
+            'meta': self.original_meta,
+            'state_dict': state_dict,
+            'optimizer': self.original_checkpoint.get('optimizer', {})
+        }
+        torch.save(checkpoint, filename)
 
     def get_model_size(self, model):
         """Calculate model size in MB"""
@@ -211,7 +216,7 @@ class ModelOptimizer:
 
         # Save FP16 model
         fp16_path = self.model_dir / self._get_model_filename('fp16', 'pth')
-        torch.save(model_fp16.state_dict(), fp16_path)
+        self._save_checkpoint_with_meta(model_fp16.state_dict(), fp16_path)
         print(f"FP16 model saved to: {fp16_path}")
 
         self.optimized_models['fp16'] = model_fp16
@@ -232,7 +237,7 @@ class ModelOptimizer:
 
         # Save INT8 model
         int8_path = self.model_dir / self._get_model_filename('int8', 'pth')
-        torch.save(model_int8.state_dict(), int8_path)
+        self._save_checkpoint_with_meta(model_int8.state_dict(), int8_path)
         print(f"INT8 model saved to: {int8_path}")
 
         self.optimized_models['int8'] = model_int8
@@ -253,7 +258,7 @@ class ModelOptimizer:
         # Create a fresh copy of the original model for ONNX export
         # to avoid FP16 conversion issues
         from mmseg.apis import init_model
-        onnx_model = init_model(self.config_path, self.checkpoint_path, device='cpu')
+        onnx_model = init_model(str(self.config_path), str(self.checkpoint_path), device='cpu')
 
         # Create dummy input
         dummy_input = torch.randn(input_shape)
@@ -473,7 +478,7 @@ def main():
     optimizer.compare_optimizations(input_shape, args.num_runs)
 
     print(f"\nOptimized models saved to: {optimizer.model_dir}")
-    print(f"Benchmark results saved to: {optimizer.model_benchmarks_dir}")
+    print(f"Benchmark results saved to: {optimizer.model_dir}")
     print(f"Session ID: {optimizer.session_id}")
     print("\nOptimization complete! 🚀")
 
