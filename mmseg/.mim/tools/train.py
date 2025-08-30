@@ -9,6 +9,23 @@ from mmengine.logging import print_log
 from mmengine.runner import Runner
 
 from mmseg.registry import RUNNERS
+# Import models to ensure they are registered
+import mmseg.models
+
+# Manually register models with mmengine if not already registered
+from mmengine.registry import MODELS
+if 'EncoderDecoder' not in MODELS.module_dict:
+    from mmseg.models.segmentors import EncoderDecoder
+    MODELS.register_module(module=EncoderDecoder, name='EncoderDecoder')
+if 'TV3SHead_shift_city' not in MODELS.module_dict:
+    from mmseg.models.decode_heads import TV3SHead_shift_city
+    MODELS.register_module(module=TV3SHead_shift_city, name='TV3SHead_shift_city')
+if 'MixVisionTransformer' not in MODELS.module_dict:
+    from mmseg.models.backbones import MixVisionTransformer
+    MODELS.register_module(module=MixVisionTransformer, name='MixVisionTransformer')
+if 'CrossEntropyLoss' not in MODELS.module_dict:
+    from mmseg.models.losses import CrossEntropyLoss
+    MODELS.register_module(module=CrossEntropyLoss, name='CrossEntropyLoss')
 
 
 def parse_args():
