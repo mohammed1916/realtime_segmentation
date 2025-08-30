@@ -10,6 +10,8 @@ import torch
 import mmengine
 from mmengine.runner import Runner
 from mmseg.utils import register_all_modules
+# Import custom transforms
+from mmseg.transforms.cityscapes_transforms import CityscapesLabelIdToTrainId
 
 def setup_environment():
     """Setup the training environment."""

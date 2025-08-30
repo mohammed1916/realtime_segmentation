@@ -3,17 +3,23 @@
 
 # Model configuration
 norm_cfg = dict(type='SyncBN', requires_grad=True)
-data_preprocessor = dict(
-    type='SegDataPreProcessor',
-    mean=[123.675, 116.28, 103.53],
-    std=[58.395, 57.12, 57.375],
-    bgr_to_rgb=True,
-    pad_val=0,
-    seg_pad_val=255)
 
 model = dict(
     type='EncoderDecoder',
-    data_preprocessor=data_preprocessor,
+    data_preprocessor=dict(
+        bgr_to_rgb=True,
+        mean=[
+            123.675,
+            116.28,
+            103.53,
+        ],
+        size_divisor=1,
+        std=[
+            58.395,
+            57.12,
+            57.375,
+        ],
+        type='SegDataPreProcessor'),
     pretrained=None,
     backbone=dict(
         type='MixVisionTransformer',
@@ -58,14 +64,36 @@ img_norm_cfg = dict(
 # Training pipeline
 train_pipeline = [
     dict(type='LoadImageFromFile'),
-    dict(type='LoadAnnotations'),
     dict(
-        type='RandomResize',
-        scale=(2048, 1024),
-        ratio_range=(0.5, 2.0),
-        keep_ratio=True),
-    dict(type='RandomCrop', crop_size=(1024, 1024), cat_max_ratio=0.75),
-    dict(type='RandomFlip', prob=0.5),
+        type='LoadAnnotations',
+        reduce_zero_label=True),  # Don't reduce zero label since we'll map it
+    dict(
+        type='CityscapesLabelIdToTrainId',
+        labelId_to_trainId={
+            0: 255, 1: 255, 2: 255, 3: 255, 4: 255, 5: 255, 6: 255, 7: 0, 8: 1, 9: 255,
+            10: 255, 11: 2, 12: 3, 13: 4, 14: 255, 15: 255, 16: 255, 17: 5, 18: 255,
+            19: 6, 20: 7, 21: 8, 22: 9, 23: 10, 24: 11, 25: 12, 26: 13, 27: 14, 28: 15,
+            29: 255, 30: 255, 31: 16, 32: 17, 33: 18
+        }),
+    dict(
+        keep_ratio=True,
+        ratio_range=(
+            0.5,
+            2.0,
+        ),
+        scale=(
+            2048,
+            1024,
+        ),
+        type='RandomResize'),
+    dict(
+        cat_max_ratio=0.75,
+        crop_size=(
+            1024,
+            1024,
+        ),
+        type='RandomCrop'),
+    dict(prob=0.5, type='RandomFlip'),
     dict(type='PhotoMetricDistortion'),
     dict(type='PackSegInputs')
 ]
@@ -73,9 +101,22 @@ train_pipeline = [
 # Test pipeline
 test_pipeline = [
     dict(type='LoadImageFromFile'),
-    dict(type='Resize', scale=(2048, 1024), keep_ratio=True),
-    dict(type='LoadAnnotations'),
-    dict(type='PackSegInputs')
+    dict(
+        type='LoadAnnotations',
+        reduce_zero_label=True),  # Don't reduce zero label since we'll map it
+    dict(
+        type='CityscapesLabelIdToTrainId',
+        labelId_to_trainId={
+            0: 255, 1: 255, 2: 255, 3: 255, 4: 255, 5: 255, 6: 255, 7: 0, 8: 1, 9: 255,
+            10: 255, 11: 2, 12: 3, 13: 4, 14: 255, 15: 255, 16: 255, 17: 5, 18: 255,
+            19: 6, 20: 7, 21: 8, 22: 9, 23: 10, 24: 11, 25: 12, 26: 13, 27: 14, 28: 15,
+            29: 255, 30: 255, 31: 16, 32: 17, 33: 18
+        }),
+    dict(keep_ratio=True, scale=(
+        2048,
+        1024,
+    ), type='Resize'),
+    dict(type='PackSegInputs'),
 ]
 
 # Data configuration
@@ -86,24 +127,82 @@ data = dict(
         type=dataset_type,
         data_root=data_root,
         data_prefix=dict(
-            img_path='leftImg8bit/train',
-            seg_map_path='gtFine/train'),
+            img_path='leftImg8bit_trainvaltest',
+            seg_map_path='gtFine'),
+        seg_map_suffix='_gtFine_labelIds.png',
+        reduce_zero_label=True,
         pipeline=train_pipeline
     ),
     val=dict(
         type=dataset_type,
         data_root=data_root,
         data_prefix=dict(
-            img_path='leftImg8bit/val',
-            seg_map_path='gtFine/val'),
+            img_path='leftImg8bit_trainvaltest',
+            seg_map_path='gtFine'),
+        seg_map_suffix='_gtFine_labelIds.png',
+        reduce_zero_label=True,
         pipeline=test_pipeline
     ),
     test=dict(
         type=dataset_type,
         data_root=data_root,
         data_prefix=dict(
-            img_path='leftImg8bit/val',
-            seg_map_path='gtFine/val'),
+            img_path='leftImg8bit_trainvaltest',
+            seg_map_path='gtFine'),
+        seg_map_suffix='_gtFine_labelIds.png',
+        reduce_zero_label=True,
+        pipeline=test_pipeline
+    )
+)
+
+# Build dataloaders
+train_dataloader = dict(
+    batch_size=2,
+    num_workers=2,
+    persistent_workers=True,
+    sampler=dict(type='DefaultSampler', shuffle=True),
+    dataset=dict(
+        type=dataset_type,
+        data_root=data_root,
+        data_prefix=dict(
+            img_path='leftImg8bit_trainvaltest',
+            seg_map_path='gtFine'),
+        seg_map_suffix='_gtFine_labelIds.png',
+        reduce_zero_label=True,
+        pipeline=train_pipeline
+    )
+)
+
+val_dataloader = dict(
+    batch_size=1,
+    num_workers=2,
+    persistent_workers=True,
+    sampler=dict(type='DefaultSampler', shuffle=False),
+    dataset=dict(
+        type=dataset_type,
+        data_root=data_root,
+        data_prefix=dict(
+            img_path='leftImg8bit_trainvaltest',
+            seg_map_path='gtFine'),
+        seg_map_suffix='_gtFine_labelIds.png',
+        reduce_zero_label=True,
+        pipeline=test_pipeline
+    )
+)
+
+test_dataloader = dict(
+    batch_size=1,
+    num_workers=2,
+    persistent_workers=True,
+    sampler=dict(type='DefaultSampler', shuffle=False),
+    dataset=dict(
+        type=dataset_type,
+        data_root=data_root,
+        data_prefix=dict(
+            img_path='leftImg8bit_trainvaltest',
+            seg_map_path='gtFine'),
+        seg_map_suffix='_gtFine_labelIds.png',
+        reduce_zero_label=True,
         pipeline=test_pipeline
     )
 )
@@ -114,6 +213,12 @@ train_cfg = dict(
     max_epochs=160,
     val_interval=10,
 )
+
+# Validation configuration
+val_cfg = dict(type='ValLoop')
+
+# Test configuration
+test_cfg = dict(type='TestLoop')
 
 # Evaluation configuration
 val_evaluator = dict(type='IoUMetric', iou_metrics=['mIoU'])
