@@ -75,8 +75,8 @@ SegFormer represents a hierarchical transformer-based architecture specifically 
 
 #### 2.2.2 Comparative Architectural Analysis
 
-| Architectural Aspect              | SegFormer                                         | Traditional CNN Approaches           |
-| --------------------------------- | ------------------------------------------------- | ------------------------------------ |
+| Architectural Aspect        | SegFormer                                         | Traditional CNN Approaches           |
+| --------------------------- | ------------------------------------------------- | ------------------------------------ |
 | **Feature Extraction**      | Hierarchical transformer with overlapping patches | Multi-scale pyramid pooling          |
 | **Global Context Modeling** | Self-attention mechanism                          | Dilated convolutional operations     |
 | **Parameter Efficiency**    | High efficiency (3.7M parameters)                 | Variable complexity (typically 20M+) |
@@ -156,19 +156,19 @@ The AdamW algorithm proceeds as follows for each parameter θ at iteration t:
 
 1. **First Moment Estimation:**
    \begin{equation}
-   \mathbf{m}_t = \beta_1 \cdot \mathbf{m}_{t-1} + (1 - \beta_1) \cdot \mathbf{g}_t
+   \mathbf{m}_t = \beta_1 \cdot \mathbf{m}_{t-1} + (1 - \beta_1) \cdot \mathbf{g}\_t
    \end{equation}
 2. **Second Moment Estimation:**
    \begin{equation}
-   \mathbf{v}_t = \beta_2 \cdot \mathbf{v}_{t-1} + (1 - \beta_2) \cdot \mathbf{g}_t^2
+   \mathbf{v}_t = \beta_2 \cdot \mathbf{v}_{t-1} + (1 - \beta_2) \cdot \mathbf{g}\_t^2
    \end{equation}
 3. **Bias Correction:**
    \begin{equation}
-   \hat{\mathbf{m}}_t = \frac{\mathbf{m}_t}{1 - \beta_1^t}, \quad \hat{\mathbf{v}}_t = \frac{\mathbf{v}_t}{1 - \beta_1^t}
+   \hat{\mathbf{m}}\_t = \frac{\mathbf{m}\_t}{1 - \beta_1^t}, \quad \hat{\mathbf{v}}\_t = \frac{\mathbf{v}\_t}{1 - \beta_1^t}
    \end{equation}
 4. **Parameter Update with Decoupled Weight Decay:**
    \begin{equation}
-   \boldsymbol{\theta}_t = \boldsymbol{\theta}_{t-1} - \alpha \cdot \left( \frac{\hat{\mathbf{m}}_t}{\sqrt{\hat{\mathbf{v}}_t} + \epsilon} + \lambda \cdot \boldsymbol{\theta}_{t-1} \right)
+   \boldsymbol{\theta}_t = \boldsymbol{\theta}_{t-1} - \alpha \cdot \left( \frac{\hat{\mathbf{m}}_t}{\sqrt{\hat{\mathbf{v}}\_t} + \epsilon} + \lambda \cdot \boldsymbol{\theta}_{t-1} \right)
    \end{equation}
 
 **Optimization Parameters:**
@@ -192,12 +192,12 @@ A two-phase learning rate schedule is implemented, combining linear warmup with 
 
 **Phase I: Linear Warmup (Iterations 0 to 1500):**
 \begin{equation}
-\alpha(t) = \alpha_{base} \times \left( f_{start} + (1 - f_{start}) \times \frac{t}{T_{warmup}} \right)
+\alpha(t) = \alpha*{base} \times \left( f*{start} + (1 - f*{start}) \times \frac{t}{T*{warmup}} \right)
 \end{equation}
 
 **Phase II: Polynomial Decay (Iterations 1500 to 160000):**
 \begin{equation}
-\alpha(t) = \alpha_{base} \times \left[ 1 - \frac{t - T_{warmup}}{T_{total} - T_{warmup}} \right]^p \times (1 - \eta_{min}) + \eta_{min}
+\alpha(t) = \alpha*{base} \times \left[ 1 - \frac{t - T*{warmup}}{T*{total} - T*{warmup}} \right]^p \times (1 - \eta*{min}) + \eta*{min}
 \end{equation}
 
 **Schedule Parameters:**
@@ -345,7 +345,7 @@ All data pipelines and training configurations were validated for proper functio
 | SegFormer-B5  | FP16      | 38.2         | 26.2             | 9.1         | 81.9     |
 | SegFormer-B5  | INT8      | 29.6         | 33.8             | 8.0         | 80.6     |
 
-*Note: Metrics derived from benchmark CSV/JSON files in optimized_models (e.g., benchmark_segformer.b0.1024x1024.city.160k_original.csv). Assumes 1024x1024 input resolution.*
+_Note: Metrics derived from benchmark CSV/JSON files in optimized_models (e.g., benchmark_segformer.b0.1024x1024.city.160k_original.csv). Assumes 1024x1024 input resolution._
 
 #### Table 2: Batch Processing Performance
 
@@ -370,7 +370,7 @@ All data pipelines and training configurations were validated for proper functio
 | SegFormer-B5  | 4          | 226.8        | 17.6             | 52.8        |
 | SegFormer-B5  | 8          | 432.9        | 18.5             | 105.6       |
 
-*Note: From benchmark_segformer.*_batch.csv files.*
+_Note: From benchmark_segformer._\_batch.csv files.\*
 
 #### Table 3: Optimization Comparison
 
@@ -383,45 +383,45 @@ All data pipelines and training configurations were validated for proper functio
 | SegFormer-B4  | 81.5 / 19.5         | 81.0 / 30.5     | 79.8 / 39.4     | 1.56x          | 2.02x          |
 | SegFormer-B5  | 82.3 / 16.8         | 81.9 / 26.2     | 80.6 / 33.8     | 1.56x          | 2.01x          |
 
-*Note: From comparison_segformer.*.csv files.*
+_Note: From comparison_segformer._.csv files.\*
 
 ### 3.3 Training Progress Analysis
 
 #### Table 4: Training Convergence Analysis Across Epochs
 
-| Epoch Range       | Learning Rate      | Loss Reduction | mIoU Improvement | Time per Epoch |
-| ----------------- | ------------------ | -------------- | ---------------- | -------------- |
+| Epoch Range | Learning Rate     | Loss Reduction | mIoU Improvement | Time per Epoch |
+| ----------- | ----------------- | -------------- | ---------------- | -------------- |
 | **0-10**    | 6e-05 → 6e-05     | -45.2%         | +15.3%           | 45min          |
 | **10-50**   | 6e-05 → 4.2e-05   | -28.7%         | +22.1%           | 42min          |
 | **50-100**  | 4.2e-05 → 2.1e-05 | -18.3%         | +18.9%           | 44min          |
 | **100-160** | 2.1e-05 → 0       | -12.4%         | +8.7%            | 46min          |
-| **Total**   | -                  | -78.9%         | +65.0%           | 11.2h          |
+| **Total**   | -                 | -78.9%         | +65.0%           | 11.2h          |
 
 ### 3.4 Class-wise Performance Analysis
 
 #### Table 5: Comparative Performance Metrics Across Training Epochs
 
-| Class                   | 10th Epoch IoU (%) | 10th Epoch Acc (%) | 20th Epoch IoU (%) | 20th Epoch Acc (%) | 30th Epoch IoU (%) | 30th Epoch Acc (%) | Improvement (10→30) |
-| ----------------------- | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ | -------------------- |
-| **road**          | 87.44              | 93.84              | 89.19              | 93.88              | 88.58              | 96.77              | +1.14%               |
-| **sidewalk**      | 48.66              | 61.01              | 55.14              | 64.85              | 54.00              | 58.82              | +5.34%               |
-| **building**      | 40.72              | 42.49              | 64.78              | 80.00              | 59.38              | 64.57              | +18.66%              |
-| **wall**          | 55.07              | 79.86              | 61.60              | 66.37              | 69.23              | 80.95              | +14.16%              |
-| **fence**         | 6.42               | 6.42               | 51.42              | 57.62              | 54.33              | 58.97              | +47.91%              |
-| **pole**          | 3.76               | 3.83               | 12.52              | 13.29              | 16.04              | 18.01              | +12.28%              |
-| **traffic light** | 79.34              | 91.20              | 83.73              | 89.25              | 85.76              | 92.92              | +6.42%               |
-| **traffic sign**  | 95.19              | 98.20              | 95.52              | 98.70              | 96.16              | 98.30              | +0.97%               |
-| **vegetation**    | 64.59              | 74.99              | 67.05              | 78.46              | 70.10              | 79.69              | +5.51%               |
-| **terrain**       | 96.61              | 97.80              | 96.58              | 98.02              | 96.58              | 98.02              | -0.03%               |
-| **sky**           | 81.46              | 90.95              | 84.14              | 91.22              | 85.73              | 95.15              | +4.27%               |
-| **person**        | 42.28              | 54.70              | 51.58              | 75.45              | 57.56              | 69.29              | +15.28%              |
-| **rider**         | 93.46              | 96.87              | 94.87              | 98.09              | 95.47              | 98.06              | +2.01%               |
-| **car**           | 51.45              | 66.57              | 63.32              | 82.87              | 75.33              | 86.89              | +23.88%              |
-| **truck**         | 69.45              | 74.10              | 80.49              | 88.25              | 85.02              | 92.52              | +15.57%              |
-| **bus**           | 0.00               | 0.00               | 2.44               | 2.44               | 26.23              | 26.59              | +26.23%              |
-| **train**         | 45.13              | 54.05              | 58.30              | 63.92              | 68.45              | 78.77              | +23.32%              |
-| **motorcycle**    | 66.30              | 92.00              | 74.55              | 89.98              | 77.52              | 87.13              | +11.22%              |
-| **bicycle**       | NaN                | NaN                | NaN                | NaN                | NaN                | NaN                | N/A                  |
+| Class             | 10th Epoch IoU (%) | 10th Epoch Acc (%) | 20th Epoch IoU (%) | 20th Epoch Acc (%) | 30th Epoch IoU (%) | 30th Epoch Acc (%) | Improvement (10→30) |
+| ----------------- | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ | ------------------- |
+| **road**          | 87.44              | 93.84              | 89.19              | 93.88              | 88.58              | 96.77              | +1.14%              |
+| **sidewalk**      | 48.66              | 61.01              | 55.14              | 64.85              | 54.00              | 58.82              | +5.34%              |
+| **building**      | 40.72              | 42.49              | 64.78              | 80.00              | 59.38              | 64.57              | +18.66%             |
+| **wall**          | 55.07              | 79.86              | 61.60              | 66.37              | 69.23              | 80.95              | +14.16%             |
+| **fence**         | 6.42               | 6.42               | 51.42              | 57.62              | 54.33              | 58.97              | +47.91%             |
+| **pole**          | 3.76               | 3.83               | 12.52              | 13.29              | 16.04              | 18.01              | +12.28%             |
+| **traffic light** | 79.34              | 91.20              | 83.73              | 89.25              | 85.76              | 92.92              | +6.42%              |
+| **traffic sign**  | 95.19              | 98.20              | 95.52              | 98.70              | 96.16              | 98.30              | +0.97%              |
+| **vegetation**    | 64.59              | 74.99              | 67.05              | 78.46              | 70.10              | 79.69              | +5.51%              |
+| **terrain**       | 96.61              | 97.80              | 96.58              | 98.02              | 96.58              | 98.02              | -0.03%              |
+| **sky**           | 81.46              | 90.95              | 84.14              | 91.22              | 85.73              | 95.15              | +4.27%              |
+| **person**        | 42.28              | 54.70              | 51.58              | 75.45              | 57.56              | 69.29              | +15.28%             |
+| **rider**         | 93.46              | 96.87              | 94.87              | 98.09              | 95.47              | 98.06              | +2.01%              |
+| **car**           | 51.45              | 66.57              | 63.32              | 82.87              | 75.33              | 86.89              | +23.88%             |
+| **truck**         | 69.45              | 74.10              | 80.49              | 88.25              | 85.02              | 92.52              | +15.57%             |
+| **bus**           | 0.00               | 0.00               | 2.44               | 2.44               | 26.23              | 26.59              | +26.23%             |
+| **train**         | 45.13              | 54.05              | 58.30              | 63.92              | 68.45              | 78.77              | +23.32%             |
+| **motorcycle**    | 66.30              | 92.00              | 74.55              | 89.98              | 77.52              | 87.13              | +11.22%             |
+| **bicycle**       | NaN                | NaN                | NaN                | NaN                | NaN                | NaN                | N/A                 |
 
 **Performance Summary:**
 
