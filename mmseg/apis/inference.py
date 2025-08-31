@@ -58,15 +58,17 @@ def init_model(config: Union[str, Path, Config],
     model = MODELS.build(config.model)
     if checkpoint is not None:
         checkpoint = load_checkpoint(model, checkpoint, map_location='cpu')
-        dataset_meta = checkpoint['meta'].get('dataset_meta', None)
+        # Handle checkpoints without 'meta' key
+        checkpoint_meta = checkpoint.get('meta', {})
+        dataset_meta = checkpoint_meta.get('dataset_meta', None)
         # save the dataset_meta in the model for convenience
-        if 'dataset_meta' in checkpoint.get('meta', {}):
+        if 'dataset_meta' in checkpoint_meta:
             # mmseg 1.x
             model.dataset_meta = dataset_meta
-        elif 'CLASSES' in checkpoint.get('meta', {}):
+        elif 'CLASSES' in checkpoint_meta:
             # < mmseg 1.x
-            classes = checkpoint['meta']['CLASSES']
-            palette = checkpoint['meta']['PALETTE']
+            classes = checkpoint_meta['CLASSES']
+            palette = checkpoint_meta['PALETTE']
             model.dataset_meta = {'classes': classes, 'palette': palette}
         else:
             warnings.simplefilter('once')
