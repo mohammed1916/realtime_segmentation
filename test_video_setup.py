@@ -13,11 +13,6 @@ def test_imports():
     """Test that all required components can be imported."""
     print("Testing imports...")
 
-    # Add TV3S path
-    tv3s_path = os.path.join(os.path.dirname(__file__), '..', 'TV3S')
-    if tv3s_path not in sys.path:
-        sys.path.insert(0, tv3s_path)
-
     try:
         # Test MMSegmentation imports
         from mmseg.utils import register_all_modules
@@ -30,28 +25,13 @@ def test_imports():
         from mmseg.models.segmentors.encoder_decoder_clips import EncoderDecoder_clips
         print("✓ EncoderDecoder_clips imported")
 
-        # Test TV3S dataset import (try multiple approaches)
-        dataset_imported = False
+        # Test TV3S dataset import
         try:
-            from TV3S.utils.datasets.cityscapes import CityscapesDataset_clips
-            dataset_imported = True
-        except ImportError:
-            try:
-                sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'TV3S', 'utils', 'datasets'))
-                import cityscapes
-                dataset_imported = True
-            except ImportError:
-                pass
-
-        if dataset_imported:
+            from tv3s_utils.datasets.cityscapes import CityscapesDataset_clips
             print("✓ CityscapesDataset_clips imported")
-        else:
+        except ImportError:
             print("⚠ CityscapesDataset_clips import failed (will be handled in training script)")
             return False
-
-        # Test mmengine registry
-        from mmengine.registry import MODELS
-        print("✓ mmengine registry imported")
 
         return True
 

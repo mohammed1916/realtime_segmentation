@@ -19,41 +19,13 @@ def setup_environment():
     register_all_modules()
 
     # Import and register TV3S components
-    try:
-        # Add TV3S path
-        tv3s_path = os.path.join(os.path.dirname(__file__), '..', 'TV3S')
-        if tv3s_path not in sys.path:
-            sys.path.insert(0, tv3s_path)
+    from mmseg.models.decode_heads.tv3s_head import TV3SHead_shift_city
+    from mmseg.models.segmentors.encoder_decoder_clips import EncoderDecoder_clips
 
-        from mmseg.models.decode_heads.tv3s_head import TV3SHead_shift_city
-        from mmseg.models.segmentors.encoder_decoder_clips import EncoderDecoder_clips
-
-        # Import TV3S transforms to register them
-        import TV3S.utils.datasets.transforms
-        import TV3S.utils.datasets.dataset_pipelines
-
-        # Try importing CityscapesDataset_clips
-        try:
-            from TV3S.utils.datasets.cityscapes import CityscapesDataset_clips
-            dataset_imported = True
-        except ImportError:
-            # Try alternative import
-            sys.path.insert(0, os.path.join(tv3s_path, 'utils', 'datasets'))
-            from cityscapes import CityscapesDataset_clips
-            dataset_imported = True
-
-        if dataset_imported:
-            print("✓ TV3S components imported successfully")
-        else:
-            print("✗ Failed to import CityscapesDataset_clips")
-            return False
-
-    except ImportError as e:
-        print(f"✗ Failed to import TV3S components: {e}")
-        print("Make sure TV3S is properly set up")
-        return False
-
+    print("✓ TV3S components imported successfully")
     return True
+
+
 
 def main():
     """Main training function."""

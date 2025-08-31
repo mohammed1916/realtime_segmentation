@@ -5,20 +5,9 @@ _base_ = [
 ]
 
 # Import TV3S components
-import sys
-import os
-# Add TV3S path - this will be handled by the training script
-# tv3s_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'TV3S')
-# if tv3s_path not in sys.path:
-#     sys.path.insert(0, tv3s_path)
-
 try:
     from mmseg.models.decode_heads.tv3s_head import TV3SHead_shift_city
     from mmseg.models.segmentors.encoder_decoder_clips import EncoderDecoder_clips
-    from TV3S.utils.datasets.cityscapes import CityscapesDataset_clips
-    # Import transforms to register them
-    import TV3S.utils.datasets.transforms
-    import TV3S.utils.datasets.dataset_pipelines
     print("TV3S components imported successfully")
 except ImportError as e:
     print(f"Warning: TV3S components not available: {e}")
@@ -128,6 +117,25 @@ data = dict(
         mamba_mode=False,
     )
 )
+
+# Dataloader configurations
+train_dataloader = dict(
+    batch_size=1,
+    num_workers=2,
+    persistent_workers=True,
+    sampler=dict(type='DefaultSampler', shuffle=True),
+    dataset=data['train']
+)
+
+val_dataloader = dict(
+    batch_size=1,
+    num_workers=2,
+    persistent_workers=True,
+    sampler=dict(type='DefaultSampler', shuffle=False),
+    dataset=data['val']
+)
+
+test_dataloader = val_dataloader
 
 # Training configuration
 train_cfg = dict(
