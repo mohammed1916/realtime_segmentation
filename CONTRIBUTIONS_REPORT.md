@@ -149,27 +149,29 @@ The SegFormer model was retrained from scratch for 30 epochs, requiring 18 hours
 The AdamW optimizer was employed with decoupled weight decay for improved generalization performance. The algorithm proceeds as follows for each parameter θ at iteration t:
 
 **Mathematical Formulation:**
+
 1. **First Moment Estimation:**
    \begin{equation}
-   \mathbf{m}_t = \beta_1 \cdot \mathbf{m}_{t-1} + (1 - \beta_1) \cdot \mathbf{g}_t
+   \mathbf{m}_t = \beta_1 \cdot \mathbf{m}_{t-1} + (1 - \beta_1) \cdot \mathbf{g}\_t
    \end{equation}
 
 2. **Second Moment Estimation:**
    \begin{equation}
-   \mathbf{v}_t = \beta_2 \cdot \mathbf{v}_{t-1} + (1 - \beta_2) \cdot \mathbf{g}_t^2
+   \mathbf{v}_t = \beta_2 \cdot \mathbf{v}_{t-1} + (1 - \beta_2) \cdot \mathbf{g}\_t^2
    \end{equation}
 
 3. **Bias Correction:**
    \begin{equation}
-   \hat{\mathbf{m}}_t = \frac{\mathbf{m}_t}{1 - \beta_1^t}, \quad \hat{\mathbf{v}}_t = \frac{\mathbf{v}_t}{1 - \beta_1^t}
+   \hat{\mathbf{m}}\_t = \frac{\mathbf{m}\_t}{1 - \beta_1^t}, \quad \hat{\mathbf{v}}\_t = \frac{\mathbf{v}\_t}{1 - \beta_1^t}
    \end{equation}
 
 4. **Parameter Update with Decoupled Weight Decay:**
    \begin{equation}
-   \boldsymbol{\theta}_t = \boldsymbol{\theta}_{t-1} - \alpha \cdot \left( \frac{\hat{\mathbf{m}}_t}{\sqrt{\hat{\mathbf{v}}_t} + \epsilon} + \lambda \cdot \boldsymbol{\theta}_{t-1} \right)
+   \boldsymbol{\theta}_t = \boldsymbol{\theta}_{t-1} - \alpha \cdot \left( \frac{\hat{\mathbf{m}}_t}{\sqrt{\hat{\mathbf{v}}\_t} + \epsilon} + \lambda \cdot \boldsymbol{\theta}_{t-1} \right)
    \end{equation}
 
 **Optimization Parameters:**
+
 - **Learning Rate**: α = 6 × 10⁻⁵
 - **First Moment Decay**: β₁ = 0.9
 - **Second Moment Decay**: β₂ = 0.999
@@ -177,6 +179,7 @@ The AdamW optimizer was employed with decoupled weight decay for improved genera
 - **Numerical Stability**: ε = 10⁻⁸
 
 **Parameter-wise Optimization:**
+
 - **Decoder Head**: 10× learning rate multiplier (α_head = 6 × 10⁻⁴)
 - **Position Embeddings**: Zero weight decay multiplier (λ_pos = 0)
 - **Normalization Layers**: Zero weight decay multiplier (λ_norm = 0)
@@ -188,15 +191,16 @@ A two-phase learning rate schedule was implemented, combining linear warmup with
 
 **Phase I: Linear Warmup (Iterations 0 to 1500):**
 \begin{equation}
-\alpha(t) = \alpha_{base} \times \left( f_{start} + (1 - f_{start}) \times \frac{t}{T_{warmup}} \right)
+\alpha(t) = \alpha*{base} \times \left( f*{start} + (1 - f*{start}) \times \frac{t}{T*{warmup}} \right)
 \end{equation}
 
 **Phase II: Polynomial Decay (Iterations 1500 to 160000):**
 \begin{equation}
-\alpha(t) = \alpha_{base} \times \left[ 1 - \frac{t - T_{warmup}}{T_{total} - T_{warmup}} \right]^p \times (1 - \eta_{min}) + \eta_{min}
+\alpha(t) = \alpha*{base} \times \left[ 1 - \frac{t - T*{warmup}}{T*{total} - T*{warmup}} \right]^p \times (1 - \eta*{min}) + \eta*{min}
 \end{equation}
 
 **Schedule Parameters:**
+
 - **Base Learning Rate**: α_base = 6 × 10⁻⁵
 - **Warmup Iterations**: T_warmup = 1500
 - **Total Iterations**: T_total = 160000
@@ -207,6 +211,7 @@ A two-phase learning rate schedule was implemented, combining linear warmup with
 #### 4.3.3 Training Configuration
 
 **Core Training Parameters:**
+
 - **Training Duration**: 30 epochs (completed in 18 hours)
 - **Batch Configuration**: 2 samples per GPU
 - **Validation Frequency**: Every 10 epochs
@@ -218,14 +223,15 @@ A two-phase learning rate schedule was implemented, combining linear warmup with
 
 The retraining process demonstrated stable convergence with progressive performance improvement across the 30 epochs. The training logs reveal detailed metrics showing the model's learning progression.
 
-| Epoch Range | Learning Rate       | Loss Reduction | mIoU Improvement | Time per Epoch |
-| ----------- | ------------------- | -------------- | ---------------- | -------------- |
+| Epoch Range | Learning Rate       | Loss Reduction              | mIoU Improvement            | Time per Epoch |
+| ----------- | ------------------- | --------------------------- | --------------------------- | -------------- |
 | **0-10**    | 6e-05 → 5.26e-05    | Training data not available | Training data not available | ~4-5 hours     |
-| **10-20**   | 5.26e-05 → 4.16e-05 | -1.0%          | +15.6%           | ~4-5 hours     |
-| **20-30**   | 4.16e-05 → 3.22e-05 | -46.2%         | +6.3%            | ~4-5 hours     |
-| **Total**   | 6e-05 → 3.22e-05    | -46.8%         | +22.8%           | ~12-15h total  |
+| **10-20**   | 5.26e-05 → 4.16e-05 | -1.0%                       | +15.6%                      | ~4-5 hours     |
+| **20-30**   | 4.16e-05 → 3.22e-05 | -46.2%                      | +6.3%                       | ~4-5 hours     |
+| **Total**   | 6e-05 → 3.22e-05    | -46.8%                      | +22.8%                      | ~12-15h total  |
 
 **Key Training Metrics from Logs:**
+
 - **Epoch 10**: Loss = 0.0590, Learning Rate = 5.26e-05, mIoU = 57.07, aAcc = 93.44
 - **Epoch 20**: Loss = 0.0584, Learning Rate = 4.16e-05, mIoU = 65.96
 - **Epoch 30**: Loss = 0.0314, Learning Rate = 3.22e-05, Final mIoU = 70.11, aAcc = 95.16
