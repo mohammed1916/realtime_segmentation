@@ -23,8 +23,8 @@ train_pipeline = [
 test_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(
-        type='MultiScaleFlipAug',
-        img_scale=(1024, 512),
+    type='MultiScaleFlipAug',
+    img_scale=(512, 256),
         flip=False,
         transforms=[
             dict(type='Resize', keep_ratio=True, process_clips=True),
@@ -39,7 +39,7 @@ data = dict(
     workers_per_gpu=2,
     train=dict(
         type='RepeatDataset',
-        times=500,
+        times=5,
         dataset=dict(
             type=dataset_type,
             data_root=data_root,
@@ -47,7 +47,9 @@ data = dict(
             ann_dir='gtFine/train',
             pipeline=train_pipeline,
             dilation=[-9, -6, -3],
-            istraining=True)),
+            istraining=True,
+        ),
+    ),
     val=dict(
         type=dataset_type,
         data_root=data_root,
