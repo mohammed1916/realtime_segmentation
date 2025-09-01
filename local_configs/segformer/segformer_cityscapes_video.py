@@ -45,10 +45,12 @@ model = dict(
 
 # Dataset configuration for Cityscapes video data
 dataset_type = 'CityscapesDataset_clips'
-data_root = 'dataset'  # Path to your dataset folder
+# Use preprocessed dataset created by scripts/preprocess_cityscapes.py
+data_root = 'dataset_preprocessed'  # Path to your preprocessed dataset folder
 img_dir = 'leftImg8bit_trainvaltest'  # Folder containing video frames
 ann_dir = 'gtFine'  # Folder containing annotations
-crop_size = (1024, 1024)
+# Reduced crop to match preprocessed 512x256 images (crop is height,width tuple on some setups)
+crop_size = (128, 256)
 
 # Image normalization
 img_norm_cfg = dict(
@@ -60,7 +62,7 @@ train_pipeline = [
     dict(type='LoadAnnotations'),
     dict(
         type='RandomResize',
-        scale=(2048, 1024),
+        scale=(512, 256),
         ratio_range=(0.5, 2.0),
         keep_ratio=True),
     dict(type='RandomCrop_clips', crop_size=crop_size, cat_max_ratio=0.75),
@@ -72,7 +74,7 @@ train_pipeline = [
 # Test pipeline for video clips
 test_pipeline = [
     dict(type='LoadImageFromFile'),
-    dict(type='Resize', scale=(2048, 1024), keep_ratio=True),
+    dict(type='Resize', scale=(512, 256), keep_ratio=True),
     dict(type='LoadAnnotations'),
     dict(type='PackSegInputs')
 ]
