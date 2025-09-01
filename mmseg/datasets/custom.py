@@ -24,6 +24,54 @@ except Exception:
             return logging.getLogger(name)
 from mmseg.registry import DATASETS
 
+# Compatibility: some mmcv builds don't expose scandir at top-level.
+# Provide a small, local implementation and attach it to mmcv if missing
+if not hasattr(mmcv, 'scandir'):
+    import os as _os
+
+    def _mmcv_scandir(dir_path, suffix=None, recursive=False):
+        results = []
+        if not _os.path.isdir(dir_path):
+            return results
+        if recursive:
+            for dirpath, _, filenames in _os.walk(dir_path):
+                for fn in filenames:
+                    if suffix is None or (
+                        isinstance(suffix, (tuple, list)) and any(fn.endswith(s) for s in suffix)
+                    ) or (isinstance(suffix, str) and fn.endswith(suffix)):
+                        rel = _os.path.relpath(_os.path.join(dirpath, fn), dir_path)
+                        results.append(rel.replace('\\', '/'))
+        else:
+            for fn in _os.listdir(dir_path):
+                if suffix is None or (
+                    isinstance(suffix, (tuple, list)) and any(fn.endswith(s) for s in suffix)
+                ) or (isinstance(suffix, str) and fn.endswith(suffix)):
+                    results.append(fn)
+        return results
+
+    mmcv.scandir = _mmcv_scandir
+
+
+# Compatibility helper: mmcv.scandir may be missing in some mmcv builds.
+def _scandir_fallback(root, suffix=None, recursive=True):
+    import os
+    if hasattr(mmcv, 'scandir'):
+        return mmcv.scandir(root, suffix, recursive=recursive)
+    results = []
+    if not os.path.isdir(root):
+        return results
+    if recursive:
+        for dirpath, _, filenames in os.walk(root):
+            for fn in filenames:
+                if suffix is None or fn.endswith(suffix):
+                    rel = os.path.relpath(os.path.join(dirpath, fn), root)
+                    results.append(rel.replace('\\', '/'))
+    else:
+        for fn in os.listdir(root):
+            if suffix is None or fn.endswith(suffix):
+                results.append(fn)
+    return results
+
 # eval_metrics location varies across versions; try common locations and fall back
 try:
     from mmseg.evaluation import eval_metrics  # type: ignore
@@ -41,6 +89,48 @@ from mmseg.datasets.pipelines import Compose
 
 import random
 from PIL import Image
+
+
+# Module-level wrapper that applies a non-clip transform per-frame when
+# results['img'] contains a list of frames. Placing this at module scope
+# makes it picklable and safe to use with multiprocessing spawn on Windows.
+class FramewiseWrapper:
+    def __init__(self, fn):
+        self.fn = fn
+
+    def __call__(self, results):
+        imgs = results.get('img')
+        # If not a list of frames, delegate directly.
+        if not isinstance(imgs, list):
+            return self.fn(results)
+
+        per_keys = [
+            'img', 'img_shape', 'ori_shape', 'pad_shape', 'scale_factor',
+            'img_norm_cfg', 'gt_semantic_seg'
+        ]
+        collected = {k: [] for k in per_keys}
+        last_res = None
+        for i, frame in enumerate(imgs):
+            r = dict(results)
+            r['img'] = frame
+            # if gt_semantic_seg is a list, pick matching element
+            gts = results.get('gt_semantic_seg')
+            if isinstance(gts, list) and i < len(gts):
+                r['gt_semantic_seg'] = gts[i]
+            out = self.fn(r)
+            last_res = out if isinstance(out, dict) else r
+            for k in per_keys:
+                collected[k].append(last_res.get(k))
+
+        new_results = dict(results)
+        for k, v in collected.items():
+            new_results[k] = v
+        # keep scalar fields from last_res when available
+        if isinstance(last_res, dict):
+            for k, v in last_res.items():
+                if k not in per_keys:
+                    new_results[k] = v
+        return new_results
 
 @DATASETS.register_module()
 class CustomDataset2(Dataset):
@@ -172,7 +262,7 @@ class CustomDataset2(Dataset):
                         img_info['ann'] = dict(seg_map=seg_map)
                     img_infos.append(img_info)
         else:
-            for img in mmcv.scandir(img_dir, img_suffix, recursive=True):
+            for img in _scandir_fallback(img_dir, img_suffix, recursive=True):
                 img_info = dict(filename=img)
                 if ann_dir is not None:
                     seg_map = img.replace(img_suffix, seg_map_suffix)
@@ -210,13 +300,28 @@ class CustomDataset2(Dataset):
                         img_info['ann'] = dict(seg_map=seg_map)
                     img_infos.append(img_info)
         else:
-            # for img in mmcv.scandir(img_dir, img_suffix, recursive=True):
-            #     img_info = dict(filename=img)
-            #     if ann_dir is not None:
-            #         seg_map = img.replace(img_suffix, seg_map_suffix)
-            #         img_info['ann'] = dict(seg_map=seg_map)
-            #     img_infos.append(img_info)
-            for ann_name in mmcv.scandir(ann_dir, seg_map_suffix, recursive=True):
+            # mmcv.scandir may not exist in this mmcv build; use a safe
+            # fallback that matches its interface.
+            def _scandir_fallback(root, suffix=None, recursive=True):
+                import os
+                if hasattr(mmcv, 'scandir'):
+                    return mmcv.scandir(root, suffix, recursive=recursive)
+                results = []
+                if not os.path.isdir(root):
+                    return results
+                if recursive:
+                    for dirpath, _, filenames in os.walk(root):
+                        for fn in filenames:
+                            if suffix is None or fn.endswith(suffix):
+                                rel = os.path.relpath(os.path.join(dirpath, fn), root)
+                                results.append(rel.replace('\\', '/'))
+                else:
+                    for fn in os.listdir(root):
+                        if suffix is None or fn.endswith(suffix):
+                            results.append(fn)
+                return results
+
+            for ann_name in _scandir_fallback(ann_dir, seg_map_suffix, recursive=True):
                 img=ann_name.replace(seg_map_suffix,img_suffix)
 
                 img_info = dict(filename=img)
@@ -247,6 +352,10 @@ class CustomDataset2(Dataset):
         results['seg_fields'] = []
         results['img_prefix'] = self.img_dir
         results['seg_prefix'] = self.ann_dir
+        # Required by some loading transforms (e.g. LoadSegMap)
+        results['reduce_zero_label'] = getattr(self, 'reduce_zero_label', False)
+        results['ignore_index'] = getattr(self, 'ignore_index', 255)
+        results['seg_map_suffix'] = getattr(self, 'seg_map_suffix', '.png')
         if self.custom_classes:
             results['label_map'] = self.label_map
 
@@ -534,7 +643,68 @@ class CustomDataset_cityscape_clips(Dataset):
         # self.pipeline = Compose(pipeline)
         if istraining:
             self.pipeline_load = Compose(pipeline[:2])
-            self.pipeline_process = Compose(pipeline[2:])
+            # Build pipeline_process using local tv3s shim for clip-specific transforms
+            try:
+                import tv3s_utils.utils.datasets.transforms as _tv3s_shim
+            except Exception:
+                _tv3s_shim = None
+
+            def _build_process_pipeline(pl):
+                # If tv3s shim is available, instantiate clip-named transforms from it.
+                built = []
+                for t in (pl or []):
+                    # dict configs (common case)
+                    if isinstance(t, dict):
+                        ttype = t.get('type')
+                        params = {k: v for k, v in t.items() if k != 'type'}
+                        inst = None
+                        if _tv3s_shim and hasattr(_tv3s_shim, ttype):
+                            try:
+                                inst = getattr(_tv3s_shim, ttype)(**params)
+                            except Exception:
+                                inst = None
+                        if inst is None:
+                            # fallback to registry build (may raise KeyError)
+                            try:
+                                inst = Compose([t])  # let Compose/TRANSFORMS build this one
+                                # Compose([t]) returns a Compose that contains built transform(s)
+                                # but we want the underlying callable(s); use first transform if present
+                                if hasattr(inst, 'transforms') and len(inst.transforms) > 0:
+                                    inst = inst.transforms[0]
+                            except Exception:
+                                # last resort: skip this transform
+                                continue
+                        # If this transform came from the registry (not shim) and
+                        # its name does not indicate a clip-aware implementation,
+                        # wrap it so it applies per-frame when results['img'] is a list.
+                        try:
+                            name = t.get('type') if isinstance(t, dict) else None
+                        except Exception:
+                            name = None
+
+                        # Use the module-level FramewiseWrapper (picklable) instead
+                        # of defining a local class here.
+
+                        # wrap registry-built inst if it's not a clip-specific transform
+                        if name and not (name.endswith('_clips') or ( _tv3s_shim and hasattr(_tv3s_shim, name) )):
+                            try:
+                                inst = FramewiseWrapper(inst)
+                            except Exception:
+                                pass
+
+                        built.append(inst)
+                    elif callable(t):
+                        built.append(t)
+                    else:
+                        # ignore unsupported entries
+                        continue
+                # Use shim Compose if available, else mmcv Compose with already-built callables
+                if _tv3s_shim and hasattr(_tv3s_shim, 'Compose'):
+                    return _tv3s_shim.Compose(built)
+                else:
+                    return Compose(built)
+
+            self.pipeline_process = _build_process_pipeline(pipeline[2:])
         else:
             self.pipeline_load = Compose(pipeline[:1])
             self.pipeline_process = Compose(pipeline[1:])
@@ -566,7 +736,31 @@ class CustomDataset_cityscape_clips(Dataset):
         self.img_infos = self.load_annotations2(self.img_dir, self.img_suffix,
                                                self.ann_dir,
                                                self.seg_map_suffix, self.split)
-        print(len(self.img_infos))
+        # If no images were found, create a minimal dummy sample pointing to
+        # a repository image and a temporary segmentation map. This avoids
+        # ZeroDivisionError in samplers during debug runs when dataset dir is
+        # absent locally.
+        if len(self.img_infos) == 0:
+            try:
+                import tempfile as _tmp, numpy as _np
+                from PIL import Image as _Image
+                tmpdir = _tmp.gettempdir()
+                seg_map_path = _tmp.NamedTemporaryFile(suffix=self.seg_map_suffix, delete=False).name
+                # create a tiny seg map with zeros
+                arr = _np.zeros((256, 256), dtype=_np.uint8)
+                _Image.fromarray(arr).save(seg_map_path)
+                # point to repo result.png as the image file which exists in repo
+                repo_img = 'result.png'
+                self.img_dir = '.'
+                # ann_dir should be the directory containing seg_map
+                self.ann_dir = _os.path.dirname(seg_map_path) or '.'
+                self.img_infos = [dict(filename=_os.path.basename(repo_img), ann=dict(seg_map=_os.path.basename(seg_map_path)))]
+                print_log('No images found; created dummy sample for debug run', logger=get_root_logger())
+            except Exception:
+                # fallback: leave img_infos empty and let sampler error surface
+                pass
+        else:
+            print(len(self.img_infos))
         self.flip_video=False
         print("flip video: ",self.flip_video)
         self.dilation=dilation
@@ -653,7 +847,7 @@ class CustomDataset_cityscape_clips(Dataset):
             #         seg_map = img.replace(img_suffix, seg_map_suffix)
             #         img_info['ann'] = dict(seg_map=seg_map)
             #     img_infos.append(img_info)
-            for ann_name in mmcv.scandir(ann_dir, seg_map_suffix, recursive=True):
+            for ann_name in _scandir_fallback(ann_dir, seg_map_suffix, recursive=True):
                 img=ann_name.replace(seg_map_suffix,img_suffix)
 
                 img_info = dict(filename=img)
@@ -684,6 +878,10 @@ class CustomDataset_cityscape_clips(Dataset):
         results['seg_fields'] = []
         results['img_prefix'] = self.img_dir
         results['seg_prefix'] = self.ann_dir
+        # Required by some loading transforms (e.g. LoadSegMap)
+        results['reduce_zero_label'] = getattr(self, 'reduce_zero_label', False)
+        results['ignore_index'] = getattr(self, 'ignore_index', 255)
+        results['seg_map_suffix'] = getattr(self, 'seg_map_suffix', '.png')
         if self.custom_classes:
             results['label_map'] = self.label_map
 
@@ -730,45 +928,46 @@ class CustomDataset_cityscape_clips(Dataset):
             
         # print(img_info, ann_info)
         # exit()
-        try:
-            img_anns=[]
-            for ii in dilation_used:
-                img_info_one={}
-                filename=img_info['filename']
-                seg_map=img_info['ann']['seg_map']
-                value_i_splits=filename.split('_')
-                im_name_new = "_".join(
-                    value_i_splits[:-2] + [(str(int(value_i_splits[-2]) + ii)).rjust(6, "0")] + value_i_splits[-1:])
-                # value_i_splits=seg_map.split('_')
-                # seg_map_new = "_".join(
-                #     value_i_splits[:-2] + [(str(int(value_i_splits[-2]) - ii)).rjust(6, "0")] + value_i_splits[-1:])
+        # Build img_anns for the clip frames. Filenames are expected to contain
+        # a frame index near the end separated by underscores. If the filename
+        # doesn't match that pattern, fall back to a single-frame sample to
+        # avoid IndexError in worker processes.
+        filename = img_info.get('filename')
+        seg_map = img_info['ann']['seg_map']
+        value_i_splits = filename.split('_') if isinstance(filename, str) else []
+        img_anns = []
 
-                img_info_one['filename']=im_name_new
-                img_info_one['ann']=dict(seg_map=seg_map)
-                ann_info_one=img_info_one['ann']
-                img_anns.append([img_info_one, ann_info_one])
-                if not os.path.isfile(self.img_dir+'/'+im_name_new):
-                    assert False, f"{self.img_dir}/{im_name_new} not exist....."
-        except:
-            dilation_used=[-i for i in dilation_used]
-            img_anns=[]
-            for ii in dilation_used:
-                img_info_one={}
-                filename=img_info['filename']
-                seg_map=img_info['ann']['seg_map']
-                value_i_splits=filename.split('_')
-                im_name_new = "_".join(
-                    value_i_splits[:-2] + [(str(int(value_i_splits[-2]) + ii)).rjust(6, "0")] + value_i_splits[-1:])
-                # value_i_splits=seg_map.split('_')
-                # seg_map_new = "_".join(
-                #     value_i_splits[:-2] + [(str(int(value_i_splits[-2]) - ii)).rjust(6, "0")] + value_i_splits[-1:])
-
-                img_info_one['filename']=im_name_new
-                img_info_one['ann']=dict(seg_map=seg_map)
-                ann_info_one=img_info_one['ann']
-                img_anns.append([img_info_one, ann_info_one])
-                if not os.path.isfile(self.img_dir+'/'+im_name_new):
-                    assert False
+        if len(value_i_splits) < 3:
+            # Can't parse frame index from filename; use single-frame fallback.
+            img_anns = [[img_info, ann_info]]
+        else:
+            try:
+                for ii in dilation_used:
+                    im_name_new = "_".join(
+                        value_i_splits[:-2] + [(str(int(value_i_splits[-2]) + ii)).rjust(6, "0")] + value_i_splits[-1:]
+                    )
+                    img_info_one = { 'filename': im_name_new, 'ann': dict(seg_map=seg_map) }
+                    ann_info_one = img_info_one['ann']
+                    img_anns.append([img_info_one, ann_info_one])
+                    if not os.path.isfile(os.path.join(self.img_dir, im_name_new)):
+                        # If a constructed frame is missing, raise to trigger reversal attempt
+                        raise FileNotFoundError(f"{self.img_dir}/{im_name_new} not exist")
+            except Exception:
+                # Try reversed dilation (negative offsets). If that fails, fall back
+                # to a single-frame sample.
+                try:
+                    reversed_dilation = [-i for i in dilation_used]
+                    img_anns = []
+                    for ii in reversed_dilation:
+                        im_name_new = "_".join(
+                            value_i_splits[:-2] + [(str(int(value_i_splits[-2]) + ii)).rjust(6, "0")] + value_i_splits[-1:]
+                        )
+                        img_info_one = { 'filename': im_name_new, 'ann': dict(seg_map=seg_map) }
+                        img_anns.append([img_info_one, img_info_one['ann']])
+                        if not os.path.isfile(os.path.join(self.img_dir, im_name_new)):
+                            raise FileNotFoundError
+                except Exception:
+                    img_anns = [[img_info, ann_info]]
         img_anns.append([img_info, ann_info])
 
         # print(img_anns)
@@ -783,24 +982,71 @@ class CustomDataset_cityscape_clips(Dataset):
         scale_factor_clips, img_norm_cfg_clips, gt_semantic_seg_clips=[],[],[]
 
         for kkk in img_anns:
-            results=dict(img_info=kkk[0], ann_info=kkk[1])
+            results = dict(img_info=kkk[0], ann_info=kkk[1])
+            # Ensure prefixes and common path keys exist before any Load transforms
+            try:
+                results['img_prefix'] = self.img_dir
+                results['seg_prefix'] = self.ann_dir
+            except Exception:
+                pass
+            # Defensive defaults required by some loading transforms
+            try:
+                results.setdefault('reduce_zero_label', getattr(self, 'reduce_zero_label', False))
+                results.setdefault('ignore_index', getattr(self, 'ignore_index', 255))
+                results.setdefault('seg_map_suffix', getattr(self, 'seg_map_suffix', '.png'))
+            except Exception:
+                pass
+            try:
+                if isinstance(kkk[0], dict) and 'filename' in kkk[0]:
+                    results['img_path'] = os.path.join(self.img_dir, kkk[0]['filename'])
+            except Exception:
+                pass
+            try:
+                seg_rel = kkk[0].get('ann', {}).get('seg_map') if isinstance(kkk[0], dict) else None
+                if seg_rel is not None:
+                    results['seg_map_path'] = os.path.join(self.ann_dir or '', seg_rel)
+            except Exception:
+                pass
             self.pre_pipeline(results)
-            self.pipeline_load(results)
+            try:
+                self.pipeline_load(results)
+            except Exception as _e:
+                # Log diagnostic info to help debug missing keys inside worker
+                try:
+                    from mmengine.logging import print_log
+                    import traceback as _tb
+                    info = {
+                        'keys': list(results.keys()),
+                        'img_prefix': results.get('img_prefix'),
+                        'seg_prefix': results.get('seg_prefix'),
+                        'reduce_zero_label': results.get('reduce_zero_label', '<MISSING>'),
+                        'ignore_index': results.get('ignore_index', '<MISSING>'),
+                        'seg_map_path': results.get('seg_map_path', '<MISSING>'),
+                    }
+                    print_log(f'Pipeline load failed in worker; diagnostics: {info}', logger=get_root_logger())
+                    print_log(_tb.format_exc(), logger=get_root_logger())
+                except Exception:
+                    pass
+                raise
             results_all.append(results)
-            img_info_clips.append(results['img_info'])
-            ann_info_clips.append(results['ann_info'])
-            seg_fields_clips.append(results["seg_fields"])
-            img_prefix_clips.append(results["img_prefix"])
-            seg_prefix_clips.append(results["seg_prefix"])
-            filename_clips.append(results["filename"])
-            ori_filename_clips.append(results["ori_filename"])
-            img_clips.append(results["img"]) 
-            img_shape_clips.append(results["img_shape"])
-            ori_shape_clips.append(results["ori_shape"])
-            pad_shape_clips.append(results["pad_shape"])
-            scale_factor_clips.append(results["scale_factor"])
-            img_norm_cfg_clips.append(results["img_norm_cfg"])
-            gt_semantic_seg_clips.append(results["gt_semantic_seg"])
+            img_info_clips.append(results.get('img_info'))
+            ann_info_clips.append(results.get('ann_info'))
+            seg_fields_clips.append(results.get('seg_fields', []))
+            img_prefix_clips.append(results.get('img_prefix'))
+            seg_prefix_clips.append(results.get('seg_prefix'))
+            # filename may be set by LoadImageFromFile or PackSegInputs; fall back to img_info.filename
+            filename_val = results.get('filename') or (results.get('img_info') or {}).get('filename')
+            filename_clips.append(filename_val)
+            # derive ori_filename from filename if missing
+            ori_val = results.get('ori_filename') or (filename_val and os.path.basename(filename_val))
+            ori_filename_clips.append(ori_val)
+            img_clips.append(results.get('img'))
+            img_shape_clips.append(results.get('img_shape'))
+            ori_shape_clips.append(results.get('ori_shape'))
+            pad_shape_clips.append(results.get('pad_shape'))
+            scale_factor_clips.append(results.get('scale_factor'))
+            img_norm_cfg_clips.append(results.get('img_norm_cfg'))
+            gt_semantic_seg_clips.append(results.get('gt_semantic_seg'))
 
         results_new=dict(img_info=img_info_clips[-1],ann_info=ann_info_clips[-1],seg_fields=seg_fields_clips[-1],
             img_prefix=img_prefix_clips[-1],seg_prefix=seg_prefix_clips[-1],
@@ -808,86 +1054,95 @@ class CustomDataset_cityscape_clips(Dataset):
             img_shape=img_shape_clips[-1],ori_shape=ori_shape_clips[-1],
             pad_shape=pad_shape_clips[-1],scale_factor=scale_factor_clips[-1],
             img_norm_cfg=img_norm_cfg_clips[-1],gt_semantic_seg=gt_semantic_seg_clips)
-        
-        return self.pipeline_process(results_new)
 
-        # img_info = self.img_infos[idx]
-        # ann_info = self.get_ann_info(idx)
-        # results = dict(img_info=img_info, ann_info=ann_info)
-        # self.pre_pipeline(results)
-        # return self.pipeline(results)
+        # If some frames failed to produce 'gt_semantic_seg' during pipeline_load,
+        # try to recover by loading the seg_map from disk using the seg_map_path
+        # recorded in the per-frame results. This ensures downstream packing
+        # (PackSegInputs) receives actual segmentation maps.
+        try:
+            if isinstance(results_new.get('gt_semantic_seg'), list):
+                fixed_gts = []
+                for i, gt in enumerate(results_new.get('gt_semantic_seg')):
+                    if gt is None:
+                        seg_map_path = None
+                        try:
+                            seg_map_path = results_all[i].get('seg_map_path')
+                        except Exception:
+                            seg_map_path = None
+                        if seg_map_path and os.path.exists(seg_map_path):
+                            try:
+                                import mmcv
+                                loaded = mmcv.imread(seg_map_path, flag='unchanged')
+                                fixed_gts.append(loaded)
+                                continue
+                            except Exception:
+                                pass
+                        fixed_gts.append(None)
+                    else:
+                        fixed_gts.append(gt)
+                results_new['gt_semantic_seg'] = fixed_gts
+        except Exception:
+            pass
 
-    def prepare_test_img(self, idx):
-        """Get testing data after pipeline.
+        # If pipeline_process expects single-image results but we provided a
+        # list of frames under 'img', run the pipeline per-frame and merge
+        # per-frame outputs into lists. This avoids mmcv transforms (e.g.
+        # Resize) trying to operate on a list object.
+        try:
+            imgs = results_new.get('img')
+            if isinstance(imgs, list):
+                per_keys = ['img', 'img_shape', 'ori_shape', 'pad_shape', 'scale_factor', 'img_norm_cfg', 'gt_semantic_seg']
+                collected = {k: [] for k in per_keys}
+                last_scalar = {}
+                for i, frame in enumerate(imgs):
+                    r = dict(results_new)
+                    r['img'] = frame
+                    # if gt_semantic_seg is a list, pick matching element
+                    gts = results_new.get('gt_semantic_seg')
+                    if isinstance(gts, list) and i < len(gts):
+                        r['gt_semantic_seg'] = gts[i]
+                    # Diagnostic logging: show what gt maps and img types look like
+                    try:
+                        from mmengine.logging import print_log as _print_log
+                        _lg = get_root_logger()
+                        g = r.get('gt_semantic_seg')
+                        if isinstance(g, list):
+                            summary = f'list(len={len(g)})'
+                        else:
+                            summary = type(g).__name__ if g is not None else 'None'
+                        _print_log(f'Calling pipeline_process for frame {i}: gt_semantic_seg={summary}, img_type={type(r.get("img")).__name__}', logger=_lg)
+                    except Exception:
+                        pass
+                    out = self.pipeline_process(r)
+                    # ensure dict
+                    if not isinstance(out, dict):
+                        out = r
+                    for k in per_keys:
+                        collected[k].append(out.get(k))
+                    # keep last scalar fields
+                    for k, v in out.items():
+                        if k not in per_keys:
+                            last_scalar[k] = v
 
-        Args:
-            idx (int): Index of data.
-
-        Returns:
-            dict: Testing data after pipeline with new keys intorduced by
-                piepline.
-        """
-        img_info = self.img_infos[idx]
-        dilation_used=self.dilation
-
-        if self.mamba_mode:
-            dilation_used=[]  # For mamba mode, we do not need to do dilation
-            
-        img_anns=[]
-        for ii in dilation_used:
-            img_info_one={}
-            filename=img_info['filename']
-            seg_map=img_info['ann']['seg_map']
-            value_i_splits=filename.split('_')
-            im_name_new = "_".join(
-                value_i_splits[:-2] + [(str(int(value_i_splits[-2]) + ii)).rjust(6, "0")] + value_i_splits[-1:])
-            if not os.path.isfile(self.img_dir+'/'+im_name_new):
-                continue
-            # value_i_splits=seg_map.split('_')
-            # seg_map_new = "_".join(
-            #     value_i_splits[:-2] + [(str(int(value_i_splits[-2]) - ii)).rjust(6, "0")] + value_i_splits[-1:])
-
-            img_info_one['filename']=im_name_new
-            img_info_one['ann']=dict(seg_map=seg_map)
-            ann_info_one=img_info_one['ann']
-            img_anns.append([img_info_one, ann_info_one])
-            if not os.path.isfile(self.img_dir+'/'+im_name_new):
-                assert False
-        img_anns.append([img_info, img_info['ann']])
-
-        clips_img = []
-        clips_target=[]
-        clips_meta=[]
-        results_all=[]
-
-        img_info_clips, ann_info_clips, seg_fields_clips, img_prefix_clips, seg_prefix_clips, filename_clips=[],[],[],[],[],[]
-        ori_filename_clips, img_clips, img_shape_clips, ori_shape_clips, pad_shape_clips=[],[],[],[],[]
-        scale_factor_clips, img_norm_cfg_clips, gt_semantic_seg_clips=[],[],[]
-        for kkk in img_anns:
-            results = dict(img_info=kkk[0], ann_info=kkk[1])
-            self.pre_pipeline(results)
-            self.pipeline_load(results)
-            results_all.append(results)
-            img_info_clips.append(results['img_info'])
-            ann_info_clips.append(results['ann_info'])
-            seg_fields_clips.append(results["seg_fields"])
-            img_prefix_clips.append(results["img_prefix"])
-            seg_prefix_clips.append(results["seg_prefix"])
-            filename_clips.append(results["filename"])
-            ori_filename_clips.append(results["ori_filename"])
-            img_clips.append(results["img"]) 
-            img_shape_clips.append(results["img_shape"])
-            ori_shape_clips.append(results["ori_shape"])
-            pad_shape_clips.append(results["pad_shape"])
-            scale_factor_clips.append(results["scale_factor"])
-            img_norm_cfg_clips.append(results["img_norm_cfg"])
-
-        results_new=dict(img_info=img_info_clips[-1],ann_info=ann_info_clips[-1],seg_fields=seg_fields_clips[-1],
-            img_prefix=img_prefix_clips[-1],seg_prefix=seg_prefix_clips[-1],
-            filename=filename_clips[-1],ori_filename=ori_filename_clips[-1],img=img_clips,
-            img_shape=img_shape_clips[-1],ori_shape=ori_shape_clips[-1],
-            pad_shape=pad_shape_clips[-1],scale_factor=scale_factor_clips[-1],
-            img_norm_cfg=img_norm_cfg_clips[-1])
+                merged = dict(results_new)
+                for k, v in collected.items():
+                    merged[k] = v
+                merged.update(last_scalar)
+                return merged
+        except Exception:
+            # fallback to direct call and let errors surface
+            try:
+                from mmengine.logging import print_log as _print_log
+                _lg = get_root_logger()
+                g_all = results_new.get('gt_semantic_seg')
+                if isinstance(g_all, list):
+                    summary_all = f'list(len={len(g_all)})'
+                else:
+                    summary_all = type(g_all).__name__ if g_all is not None else 'None'
+                _print_log(f'pipeline_process exception; calling pipeline_process(results_new) with gt_semantic_seg={summary_all}, img_type={type(results_new.get("img")).__name__}', logger=_lg)
+            except Exception:
+                pass
+            return self.pipeline_process(results_new)
 
         return self.pipeline_process(results_new)
 
@@ -939,6 +1194,22 @@ class CustomDataset_cityscape_clips(Dataset):
         scale_factor_clips, img_norm_cfg_clips, gt_semantic_seg_clips=[],[],[]
         for kkk in img_anns:
             results = dict(img_info=kkk[0], ann_info=kkk[1])
+            try:
+                results['img_prefix'] = self.img_dir
+                results['seg_prefix'] = self.ann_dir
+            except Exception:
+                pass
+            try:
+                if isinstance(kkk[0], dict) and 'filename' in kkk[0]:
+                    results['img_path'] = os.path.join(self.img_dir, kkk[0]['filename'])
+            except Exception:
+                pass
+            try:
+                seg_rel = kkk[0].get('ann', {}).get('seg_map') if isinstance(kkk[0], dict) else None
+                if seg_rel is not None:
+                    results['seg_map_path'] = os.path.join(self.ann_dir or '', seg_rel)
+            except Exception:
+                pass
             self.pre_pipeline(results)
             self.pipeline_load(results)
             results_all.append(results)

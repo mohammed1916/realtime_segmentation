@@ -4,14 +4,8 @@ _base_ = [
     '../_base_/schedules/schedule_160k.py'
 ]
 
-# Import TV3S components
-try:
-    from mmseg.models.decode_heads.tv3s_head import TV3SHead_shift_city
-    from mmseg.models.segmentors.encoder_decoder_clips import EncoderDecoder_clips
-    print("TV3S components imported successfully")
-except ImportError as e:
-    print(f"Warning: TV3S components not available: {e}")
-    print("They will be imported in the training script")
+# TV3S components are imported at runtime by the training script to avoid
+# embedding live class objects into the config during parsing.
 
 # Model configuration with TV3S temporal head
 model = dict(
@@ -36,6 +30,7 @@ model = dict(
     decode_head=dict(
         type='TV3SHead_shift_city',
         in_channels=[32, 64, 160, 256],
+    feature_strides=[4, 8, 16, 32],
         in_index=[0, 1, 2, 3],
         channels=256,
         dropout_ratio=0.1,
@@ -148,17 +143,18 @@ train_cfg = dict(
 val_evaluator = dict(type='IoUMetric', iou_metrics=['mIoU'])
 test_evaluator = val_evaluator
 
-# Optimizer configuration
+# Optimizer configuration - override base SGD optimizer from schedule_160k
+# to use AdamW (no momentum arg)
 optim_wrapper = dict(
     type='OptimWrapper',
-    optimizer=dict(
-        type='AdamW', lr=0.00006, betas=(0.9, 0.999), weight_decay=0.01),
+    optimizer=dict(type='AdamW', lr=0.00006, betas=(0.9, 0.999), weight_decay=0.01),
     paramwise_cfg=dict(
         custom_keys={
             'pos_block': dict(decay_mult=0.),
             'norm': dict(decay_mult=0.),
             'head': dict(lr_mult=10.)
         }))
+optimizer = dict(type='AdamW', lr=0.00006, betas=(0.9, 0.999), weight_decay=0.01)
 
 # Learning rate scheduler
 param_scheduler = [

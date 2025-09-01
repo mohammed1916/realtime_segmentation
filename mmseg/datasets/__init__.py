@@ -63,3 +63,7 @@ __all__ = [
     'ConcatCDInput', 'BaseCDDataset', 'DSDLSegDataset', 'BDD100KDataset',
     'NYUDataset', 'HSIDrive20Dataset'
 ]
+
+# Backwards compatibility: some older code uses PIPELINES to register transforms
+from mmseg.registry import TRANSFORMS as PIPELINES
+__all__.append('PIPELINES')

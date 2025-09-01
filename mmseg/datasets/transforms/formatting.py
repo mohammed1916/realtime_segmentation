@@ -60,6 +60,11 @@ class PackSegInputs(BaseTransform):
             - 'data_sample' (obj:`SegDataSample`): The annotation info of the
                 sample.
         """
+        # Allow either 'gt_seg_map' (standard) or 'gt_semantic_seg' (clip dataset)
+        # by aliasing the latter to the former so downstream packing is uniform.
+        if 'gt_semantic_seg' in results and 'gt_seg_map' not in results:
+            results['gt_seg_map'] = results['gt_semantic_seg']
+
         packed_results = dict()
         if 'img' in results:
             img = results['img']
@@ -73,16 +78,17 @@ class PackSegInputs(BaseTransform):
             packed_results['inputs'] = img
 
         data_sample = SegDataSample()
-        if 'gt_seg_map' in results:
-            if len(results['gt_seg_map'].shape) == 2:
-                data = to_tensor(results['gt_seg_map'][None,
-                                                       ...].astype(np.int64))
+        gt_map = results.get('gt_seg_map', None)
+        if gt_map is not None:
+            # Ensure gt_map has a shape attribute and is not None before using
+            if hasattr(gt_map, 'shape') and len(gt_map.shape) == 2:
+                data = to_tensor(gt_map[None, ...].astype(np.int64))
             else:
                 warnings.warn('Please pay attention your ground truth '
                               'segmentation map, usually the segmentation '
                               'map is 2D, but got '
-                              f'{results["gt_seg_map"].shape}')
-                data = to_tensor(results['gt_seg_map'].astype(np.int64))
+                              f'{getattr(gt_map, "shape", type(gt_map))}')
+                data = to_tensor(gt_map.astype(np.int64))
             gt_sem_seg_data = dict(data=data)
             data_sample.gt_sem_seg = PixelData(**gt_sem_seg_data)
 

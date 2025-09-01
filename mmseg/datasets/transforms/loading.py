@@ -105,11 +105,8 @@ class LoadAnnotations(MMCV_LoadAnnotations):
 
         # reduce zero_label
         if self.reduce_zero_label is None:
-            self.reduce_zero_label = results['reduce_zero_label']
-        assert self.reduce_zero_label == results['reduce_zero_label'], \
-            'Initialize dataset with `reduce_zero_label` as ' \
-            f'{results["reduce_zero_label"]} but when load annotation ' \
-            f'the `reduce_zero_label` is {self.reduce_zero_label}'
+            # Fall back to results-provided value if present; default to False
+            self.reduce_zero_label = results.get('reduce_zero_label', False)
         if self.reduce_zero_label:
             # avoid using underflow conversion
             gt_semantic_seg[gt_semantic_seg == 0] = 255

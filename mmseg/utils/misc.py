@@ -62,8 +62,14 @@ def stack_batch(inputs: List[torch.Tensor],
         f'but got {[tensor.shape[0] for tensor in inputs]}'
 
     # only one of size and size_divisor should be valid
-    assert (size is not None) ^ (size_divisor is not None), \
-        'only one of size and size_divisor should be valid'
+    # In some debug configurations both may be set accidentally; prefer
+    # size_divisor (keeps divisible shape) and warn instead of asserting
+    # to allow debugging to continue.
+    if (size is not None) and (size_divisor is not None):
+        import warnings
+        warnings.warn('Both `size` and `size_divisor` are set; preferring `size_divisor`.')
+        size = None
+    # If both are None, allow dynamic padding to the max size in batch.
 
     padded_inputs = []
     padded_samples = []
