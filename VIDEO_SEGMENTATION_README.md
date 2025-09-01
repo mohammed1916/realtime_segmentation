@@ -160,6 +160,7 @@ crop_size = (1024, 1024)         # Input resolution
    - Use smaller crop size
 
 4. **CUDA Errors**
+
    - Ensure CUDA is properly installed
    - Check GPU memory availability
    - Try CPU training first

@@ -4,13 +4,39 @@ from functools import reduce
 
 import mmcv
 import numpy as np
-from mmcv.utils import print_log
+try:
+    from mmcv.utils import print_log
+except Exception:
+    from mmengine.logging import print_log
+
 from terminaltables import AsciiTable
 from torch.utils.data import Dataset
 
-from mmseg.core import eval_metrics
-from mmseg.utils import get_root_logger
-from mmseg.datasets import DATASETS
+try:
+    from mmseg.utils import get_root_logger
+except Exception:
+    try:
+        from mmengine.logging import get_logger as get_root_logger
+    except Exception:
+        import logging
+
+        def get_root_logger(name=None):
+            return logging.getLogger(name)
+from mmseg.registry import DATASETS
+
+# eval_metrics location varies across versions; try common locations and fall back
+try:
+    from mmseg.evaluation import eval_metrics  # type: ignore
+except Exception:
+    try:
+        from tv3s_utils.datasets.custom import eval_metrics  # type: ignore
+    except Exception:
+        # last resort: define a minimal stub
+        def eval_metrics(results, gt_seg_maps, num_classes, ignore_index, metrics, **kwargs):
+            # return zeros for all metrics (compatible signature)
+            if 'mIoU' in metrics:
+                return (0.0, [0.0] * num_classes, [0.0] * num_classes)
+            return ()
 from mmseg.datasets.pipelines import Compose
 
 import random

@@ -3,8 +3,8 @@ import numpy as np
 import os.path as osp
 import tempfile
 from PIL import Image
-from mmcv.utils import print_log
-from mmseg.datasets import DATASETS
+from mmengine.logging import print_log
+from mmseg.registry import DATASETS
 from .custom import CustomDataset2, CustomDataset_cityscape_clips
 
 
