@@ -2,13 +2,25 @@ import sys, traceback
 sys.path.insert(0, '.')
 
 
-def main():
+def main(use_cuda: bool = False, device: str | None = None):
     import importlib
     import mmengine
     from mmengine.runner import Runner
+    from pathlib import Path
 
+    # Resolve config path relative to this script so the script can be run from any CWD
+    base_dir = Path(__file__).resolve().parent
+    cfg_path = base_dir / 'local_configs' / 'segformer' / 'segformer_cityscapes_video.py'
     print('Loading config...')
-    cfg = mmengine.Config.fromfile('local_configs/segformer/segformer_cityscapes_video.py')
+    if not cfg_path.exists():
+        # Fallback to plain relative path if the file isn't found where expected
+        cfg_rel = Path('local_configs/segformer/segformer_cityscapes_video.py')
+        if cfg_rel.exists():
+            cfg_path = cfg_rel
+        else:
+            raise FileNotFoundError(f"Config file not found at '{cfg_path}' or '{cfg_rel}'")
+
+    cfg = mmengine.Config.fromfile(str(cfg_path))
 
     if 'work_dir' not in cfg:
         cfg.work_dir = cfg.get('work_dir', 'work_dirs/segformer_cityscapes_video')
@@ -104,19 +116,40 @@ def main():
         # produce deterministic, inspectable errors.
         try:
             import torch
-            if torch.cuda.is_available():
-                print('CUDA available: moving model to CPU for debug run to avoid OOM')
+            # If the user provided an explicit device, try to move the model there.
+            if device is not None:
                 try:
-                    runner.model.to('cpu')
+                    print(f'Moving model to device: {device}')
+                    runner.model.to(device)
                 except Exception:
                     pass
                 try:
-                    # If the model has a data_preprocessor with a device field,
-                    # update it so inputs are processed on CPU.
                     dp = getattr(runner.model, 'data_preprocessor', None)
                     if dp is not None and hasattr(dp, 'device'):
-                        dp.device = 'cpu'
+                        dp.device = device
                 except Exception:
+                    pass
+            else:
+                # Default debug behaviour: move model to CPU when CUDA is available
+                # unless the user explicitly asked to use CUDA.
+                if torch.cuda.is_available() and not use_cuda:
+                    print('CUDA available: moving model to CPU for debug run to avoid OOM')
+                    try:
+                        runner.model.to('cpu')
+                    except Exception:
+                        pass
+                    try:
+                        # If the model has a data_preprocessor with a device field,
+                        # update it so inputs are processed on CPU.
+                        dp = getattr(runner.model, 'data_preprocessor', None)
+                        if dp is not None and hasattr(dp, 'device'):
+                            dp.device = 'cpu'
+                    except Exception:
+                        pass
+                elif torch.cuda.is_available() and use_cuda:
+                    print('CUDA available and --cuda requested: leaving model on CUDA')
+                else:
+                    # Either CUDA not available, or we're already on CPU — nothing to do.
                     pass
         except Exception:
             pass
@@ -134,4 +167,16 @@ if __name__ == '__main__':
         freeze_support()
     except Exception:
         pass
-    main()
+    # Lightweight CLI so users can override debug behaviour
+    try:
+        import argparse
+
+        parser = argparse.ArgumentParser(description='Run debug training with optional device control')
+        parser.add_argument('--cuda', action='store_true', help='Allow using CUDA device if available (default: move to CPU for debug)')
+        parser.add_argument('--device', type=str, default=None, help='Explicit device to move the model to, e.g. "cpu" or "cuda:0"')
+        args, unknown = parser.parse_known_args()
+
+        main(use_cuda=args.cuda, device=args.device)
+    except Exception:
+        # Fallback to previous behaviour
+        main()
