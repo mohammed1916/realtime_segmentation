@@ -4,6 +4,8 @@ import cv2
 import torch
 import numpy as np
 from mmengine.model.utils import revert_sync_batchnorm
+import os
+import glob
 from mmseg.apis import init_model
 from mmseg.visualization import SegLocalVisualizer
 from mmseg.structures import SegDataSample
@@ -48,7 +50,58 @@ def main():
     assert args.show or args.output_file, 'At least one output should be enabled.'
 
     # build the model
-    model = init_model(args.config, args.checkpoint, device=args.device)
+    # If the config path or checkpoint is missing, try to find reasonable alternatives
+    def _find_file_by_tokens(name, exts=(".py",)):
+        # break name into tokens and greedily search repo for files containing them
+        base = os.path.basename(name)
+        name_no_ext = os.path.splitext(base)[0]
+        tokens = [t for t in re.split(r'[-_.]', name_no_ext) if t]
+        # sort tokens by length to prefer specific tokens
+        tokens.sort(key=len, reverse=True)
+        search_paths = ['configs', os.path.join('mmseg', '.mim', 'configs'), '']
+        for token in tokens:
+            for search_root in search_paths:
+                pattern = os.path.join(search_root, '**', f'*{token}*')
+                for ext in exts:
+                    for p in glob.glob(pattern + ext, recursive=True):
+                        if os.path.isfile(p):
+                            return p
+        # final fallback: search any file with matching extensions anywhere
+        for ext in exts:
+            matches = glob.glob(f'**/*{ext}', recursive=True)
+            if matches:
+                return matches[0]
+        return None
+
+    cfg_path = args.config
+    if not os.path.isfile(cfg_path):
+        print(f"Config '{cfg_path}' not found. Searching for a matching config in the repo...")
+        found = _find_file_by_tokens(cfg_path, exts=(".py",))
+        if found:
+            print(f"Using found config: {found}")
+            cfg_path = found
+        else:
+            print('No config file found in repo. Please provide a valid config path.')
+            return
+
+    ckpt_path = args.checkpoint
+    if not os.path.isfile(ckpt_path):
+        print(f"Checkpoint '{ckpt_path}' not found. Searching for a matching .pth in the repo...")
+        found_ckpt = _find_file_by_tokens(ckpt_path, exts=(".pth", ".pt"))
+        if found_ckpt:
+            print(f"Using found checkpoint: {found_ckpt}")
+            ckpt_path = found_ckpt
+        else:
+            # also try to find any .pth in repo root
+            pths = glob.glob('**/*.pth', recursive=True)
+            if pths:
+                print(f"No exact match; using first .pth found: {pths[0]}")
+                ckpt_path = pths[0]
+            else:
+                print('No checkpoint (.pth) found in repo. Please provide a valid checkpoint path.')
+                return
+
+    model = init_model(cfg_path, ckpt_path, device=args.device)
     if args.device == 'cpu':
         model = revert_sync_batchnorm(model)
 
@@ -59,10 +112,12 @@ def main():
         to_rgb=True
     )
 
-    # Initialize visualizer
+    # Initialize visualizer. Ensure a local save_dir exists to satisfy LocalVisBackend.
+    save_dir = os.path.join(os.getcwd(), 'results', 'video_demo')
+    os.makedirs(save_dir, exist_ok=True)
     visualizer = SegLocalVisualizer(
         vis_backends=[dict(type='LocalVisBackend')],
-        save_dir=None,
+        save_dir=save_dir,
         alpha=args.opacity
     )
 
