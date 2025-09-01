@@ -1,14 +1,16 @@
 # dataset settings (LOW-RES pretraining)
 dataset_type = 'CityscapesDataset_clips'
-data_root = 'dataset'
+# Use a separate preprocessed dataset folder to avoid runtime resizing and memory spikes
+data_root = 'dataset_preprocessed'
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
-crop_size = (256, 512)  
+# Reduce resolution by half to lower memory / I/O (was 1024x512 with 256x512 crop)
+crop_size = (128, 256)
 
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations'),
-    dict(type='Resize', img_scale=(1024, 512), keep_ratio=True, process_clips=True),
+    dict(type='Resize', img_scale=(512, 256), keep_ratio=True, process_clips=True),
     dict(type='RandomCrop_clips', crop_size=crop_size, cat_max_ratio=0.75),
     dict(type='RandomFlip_clips', prob=0.5),
     dict(type='PhotoMetricDistortion_clips'),
