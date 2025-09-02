@@ -1,215 +1,245 @@
-import sys, traceback
+import os
+import sys
+import traceback
+
 sys.path.insert(0, '.')
 
-
-def main(use_cuda: bool = False, device: str | None = None):
-    import importlib
-    import mmengine
-    from mmengine.runner import Runner
-    from pathlib import Path
-
-    # Resolve config path relative to this script so the script can be run from any CWD
-    base_dir = Path(__file__).resolve().parent
-    cfg_path = base_dir / 'local_configs' / 'segformer' / 'segformer_cityscapes_video.py'
-    print('Loading config...')
-    if not cfg_path.exists():
-        # Fallback to plain relative path if the file isn't found where expected
-        cfg_rel = Path('local_configs/segformer/segformer_cityscapes_video.py')
-        if cfg_rel.exists():
-            cfg_path = cfg_rel
-        else:
-            raise FileNotFoundError(f"Config file not found at '{cfg_path}' or '{cfg_rel}'")
-
-    cfg = mmengine.Config.fromfile(str(cfg_path))
-
-    if 'work_dir' not in cfg:
-        cfg.work_dir = cfg.get('work_dir', 'work_dirs/segformer_cityscapes_video')
-
-    # Remove incompatible train loop keys (some configs include max_iters which EpochBasedTrainLoop
-    # does not accept). Keep max_epochs when present.
+def _get_logger():
     try:
-        if hasattr(cfg, 'train_cfg') and isinstance(cfg.train_cfg, dict):
-            if 'max_iters' in cfg.train_cfg:
-                print("Removing 'max_iters' from cfg.train_cfg (incompatible with EpochBasedTrainLoop)")
-                cfg.train_cfg.pop('max_iters', None)
-    except Exception:
-        pass
+        import mmengine
 
-    # Try to import mmseg dataset and transforms shim so worker processes can import them
-    try:
-        import mmseg.datasets.cityscapes_video as _city_ds
-        print('✓ Imported mmseg.datasets.cityscapes_video')
-    except Exception as e:
-        print(f'⚠ Could not import mmseg.datasets.cityscapes_video: {e}')
-
-    try:
-        importlib.import_module('mmseg.datasets.transforms')
-        print('✓ Imported mmseg.datasets.transforms')
-    except Exception:
         try:
-            importlib.import_module('tv3s_utils.utils.datasets.transforms')
-            print('✓ Imported tv3s_utils utils transforms')
-        except Exception as e:
-            print(f'⚠ Could not import tv3s transforms: {e}')
+            return mmengine.get_logger(__name__)
+        except Exception:
+            # Older mmengine installs may not expose get_logger in the same way
+            return None
+    except Exception:
+        return None
 
-    # Best-effort injection of shim transforms into registries used by Compose
+
+def _get_last_checkpoint_path(cfg):
+    """Return the absolute path to the checkpoint referenced by cfg.work_dir/last_checkpoint(.pth).
+
+    If the file contains a relative filename (common), join it with cfg.work_dir.
+    Returns None when not found or unreadable.
+    """
+    work_dir = None
+    if hasattr(cfg, 'work_dir'):
+        work_dir = cfg.work_dir
+    else:
+        try:
+            work_dir = cfg.get('work_dir', None)
+        except Exception:
+            work_dir = None
+
+    if not work_dir:
+        return None
+
+    base = os.path.join(str(work_dir), 'last_checkpoint')
+    if os.path.exists(base):
+        p = base
+    elif os.path.exists(base + '.pth'):
+        p = base + '.pth'
+    else:
+        return None
+
     try:
-        import mmcv.transforms.wrappers as _mmcv_wrappers
-        import tv3s_utils.utils.datasets.transforms as _tv3s_shim
+        with open(p, 'r') as f:
+            content = f.read().strip()
+        if not content:
+            return None
+        # If content is a bare filename, join with work_dir
+        if os.path.isabs(content):
+            return content
+        return os.path.join(str(work_dir), content)
+    except Exception:
+        return None
 
-        _shim_map = {
-            name: obj
-            for name, obj in vars(_tv3s_shim).items()
-            if isinstance(obj, type) and hasattr(obj, '__mro__') and _tv3s_shim._BaseTransform in obj.__mro__
-        }
 
-        moddict = getattr(_mmcv_wrappers.TRANSFORMS, '_module_dict', None)
-        if isinstance(moddict, dict):
-            for _n, _cls in _shim_map.items():
-                if _n not in moddict:
-                    moddict[_n] = _cls
-            print('✓ Injected shim transforms into mmcv.transforms.wrappers.TRANSFORMS')
+def _verify_loaded_weights(runner, ckpt_state_dict):
+    """Quickly compare one overlapping parameter between checkpoint and model.
+
+    Prints a simple PASS/WARN message.
+    """
+    try:
+        import torch as _torch
+
+        ms = runner.model.state_dict()
+        common = [k for k in ckpt_state_dict.keys() if k in ms]
+        if not common:
+            print('VERIFY: no overlapping keys to compare')
+            return
+        k = common[0]
+        ck_t = ckpt_state_dict[k].cpu()
+        md_t = ms[k].cpu()
+        # shapes may differ if optimizer-state-only etc.; guard the comparison
+        if ck_t.shape == md_t.shape and _torch.allclose(ck_t, md_t, atol=1e-6):
+            print(f'VERIFY PASS: parameter {k} matches checkpoint')
+        else:
+            print(f'VERIFY WARN: parameter {k} differs between checkpoint and model')
+    except Exception as e:
+        print('VERIFY: comparison failed:', e)
+
+
+def _load_checkpoint_only_last(runner, cfg):
+    """Attempt to load only the checkpoint referenced by cfg.work_dir/last_checkpoint(.pth).
+
+    Preferred order:
+      1. runner.load_checkpoint(path)
+      2. torch.load(path, weights_only=True) -> apply state_dict to model
+      3. Controlled allowlist of mmengine.logging.history_buffer.HistoryBuffer then torch.load(weights_only=False)
+
+    Returns True if any weights were applied to the model, False otherwise.
+    """
+    logger = _get_logger()
+    def L(msg):
+        if logger:
+            try:
+                logger.info(msg)
+            except Exception:
+                print(msg)
+        else:
+            print(msg)
+
+    path = _get_last_checkpoint_path(cfg)
+    if not path:
+        L('No last_checkpoint file found in cfg.work_dir; skipping checkpoint load.')
+        return False
+
+    L(f'Loading checkpoint pointed by last_checkpoint: {path}')
+
+    try:
+        # 1) Prefer runner.load_checkpoint (it may handle mmengine-specific objects)
+        try:
+            ck = runner.load_checkpoint(path)
+            L(f'runner.load_checkpoint succeeded: {path}')
+            st = ck.get('state_dict', ck)
+            if isinstance(st, dict):
+                _verify_loaded_weights(runner, st)
+            return True
+        except Exception as e1:
+            L(f'runner.load_checkpoint failed: {e1}')
+
+        # 2) Try torch.load weights_only
+        import torch
+        try:
+            ck2 = torch.load(path, map_location='cpu', weights_only=True)
+            st2 = ck2.get('state_dict', ck2)
+            if isinstance(st2, dict):
+                runner.model.load_state_dict(st2, strict=False)
+                L('Weights-only torch.load applied to model')
+                _verify_loaded_weights(runner, st2)
+                return True
+        except Exception as e2:
+            L(f'weights-only torch.load failed: {e2}')
+            # Detect HistoryBuffer issue and attempt allowlist only when it appears
+            if 'HistoryBuffer' in str(e2) or 'mmengine.logging.history_buffer' in str(e2):
+                try:
+                    import mmengine.logging.history_buffer as _hb
+                    hb = getattr(_hb, 'HistoryBuffer', None)
+                    if hb is not None:
+                        try:
+                            # Prefer the context manager safe_globals when available
+                            if hasattr(torch.serialization, 'safe_globals'):
+                                with torch.serialization.safe_globals([hb]):
+                                    ck3 = torch.load(path, map_location='cpu', weights_only=False)
+                            else:
+                                # older PyTorch exposes add_safe_globals which registers globals
+                                torch.serialization.add_safe_globals([hb])
+                                ck3 = torch.load(path, map_location='cpu', weights_only=False)
+                            st3 = ck3.get('state_dict', ck3)
+                            if isinstance(st3, dict):
+                                runner.model.load_state_dict(st3, strict=False)
+                                L('Loaded checkpoint after allowlisting HistoryBuffer')
+                                _verify_loaded_weights(runner, st3)
+                                return True
+                        except Exception as e3:
+                            L(f'Allowlist load failed: {e3}')
+                    else:
+                        L('HistoryBuffer not available for allowlisting')
+                except Exception as e_imp:
+                    L(f'Failed to import HistoryBuffer for allowlisting: {e_imp}')
+
+        L('No recoverable load; continuing with freshly initialized model')
+        return False
+
+    except Exception as e:
+        L(f'Unexpected error during checkpoint loading: {e}')
+        if os.environ.get('DEBUG_DUMP_EXC'):
+            traceback.print_exc()
+        return False
+
+
+def main(use_cuda=False, device=None):
+    # lightweight environment setup
+    try:
+        import mmseg
+        from mmseg.utils import register_all_modules
+    except Exception:
+        # mmseg may already be available through PYTHONPATH
+        register_all_modules = None
+
+    try:
+        import mmengine
+        from mmengine.runner import Runner
+    except Exception as e:
+        print('mmengine or Runner import failed:', e)
+        raise
+
+    # Register mmseg modules when available
+    try:
+        if register_all_modules:
+            register_all_modules()
     except Exception:
         pass
 
-    # Sanitise optimizer config (remove momentum for AdamW)
+    # Load the config used for training
+    cfg_path = 'local_configs/segformer/segformer_cityscapes_video.py'
+    if not os.path.exists(cfg_path):
+        print(f'Config file not found: {cfg_path}')
+        return
+    cfg = mmengine.Config.fromfile(cfg_path)
+
+    # Ensure work_dir exists
+    work_dir = getattr(cfg, 'work_dir', None)
+    if not work_dir:
+        work_dir = 'work_dirs/segformer_cityscapes_video'
+        cfg.work_dir = work_dir
+    os.makedirs(str(work_dir), exist_ok=True)
+
+    # Build the runner
+    runner = Runner.from_cfg(cfg)
+
+    # Attempt to load only the last checkpoint file
+    _load_checkpoint_only_last(runner, cfg)
+
+    # If user only wanted to test loading, exit early
+    if os.environ.get('DEBUG_LOAD_ONLY'):
+        print('DEBUG_LOAD_ONLY set: exiting after checkpoint load/verify (no training).')
+        return
+
+    # Move model based on device flags
     try:
-        def _sanitize_opt(opt_cfg):
+        import torch
+        if device:
             try:
-                typ = opt_cfg.get('type') if hasattr(opt_cfg, 'get') else (opt_cfg.get('type') if isinstance(opt_cfg, dict) else None)
-                if isinstance(typ, str) and typ.lower() == 'adamw':
-                    if hasattr(opt_cfg, 'pop'):
-                        opt_cfg.pop('momentum', None)
-                    elif isinstance(opt_cfg, dict) and 'momentum' in opt_cfg:
-                        del opt_cfg['momentum']
+                runner.model.to(device)
             except Exception:
                 pass
-
-        ow = cfg.get('optim_wrapper') if hasattr(cfg, 'get') else None
-        if ow:
-            opt = ow.get('optimizer') if hasattr(ow, 'get') else None
-            if opt:
-                _sanitize_opt(opt)
-        top_opt = cfg.get('optimizer') if hasattr(cfg, 'get') else None
-        if top_opt:
-            _sanitize_opt(top_opt)
-    except Exception:
-        pass
-
-    print('Creating Runner.from_cfg...')
-    # For debug runs prefer main-process data loading to avoid worker import
-    # complications and get clearer tracebacks. Force num_workers=0.
-    try:
-        if hasattr(cfg, 'train_dataloader') and isinstance(cfg.train_dataloader, dict):
-            cfg.train_dataloader['num_workers'] = 0
-            cfg.train_dataloader['persistent_workers'] = False
-    except Exception:
-        pass
-
-    runner = Runner.from_cfg(cfg)
-    print('Runner created')
-
-    # One-time debug wrappers: inspect data_samples.metainfo when the model's
-    # loss() and predict() are first called. This helps determine whether the
-    # dataset instances expose `metainfo`/`dataset_meta` at runtime (the root
-    # cause for metrics falling back to a single generated class).
-    # One-time diagnostic: inspect the actual dataset instances used by the
-    # runner's dataloaders (train/val/test) and print their class and any
-    # metainfo-like attributes. This avoids wrapping model methods and is
-    # safer across different mmengine/mmseg versions.
-    try:
-        def _inspect_loader(loader, name):
-            try:
-                ds = getattr(loader, 'dataset', None)
-                print(f'DEBUG: {name} loader dataset type: {type(ds)}')
-                if ds is None:
-                    return
-                # Common attribute names to check
-                for attr in ('metainfo', 'dataset_meta', 'METAINFO', 'classes', 'CLASSES', 'PALETTE', 'palette'):
-                    try:
-                        val = getattr(ds, attr, None)
-                        if val is not None:
-                            print(f'DEBUG: {name} dataset.{attr} = {val}')
-                    except Exception as _e:
-                        print(f'DEBUG: error reading {attr} from {name} dataset: {_e}')
-                # If dataset is a wrapper (e.g., Subset), try to reach inner dataset
+        else:
+            if torch.cuda.is_available() and not use_cuda:
+                print('CUDA available: moving model to CPU for debug run to avoid OOM')
                 try:
-                    inner = getattr(ds, 'dataset', None)
-                    if inner is not None and inner is not ds:
-                        print(f'DEBUG: {name} inner dataset type: {type(inner)}')
-                        for attr in ('metainfo', 'dataset_meta', 'METAINFO', 'CLASSES'):
-                            try:
-                                val = getattr(inner, attr, None)
-                                if val is not None:
-                                    print(f'DEBUG: {name} inner.{attr} = {val}')
-                            except Exception:
-                                pass
+                    runner.model.to('cpu')
                 except Exception:
                     pass
-            except Exception:
-                pass
-
-        try:
-            # train loader
-            _inspect_loader(getattr(runner, 'train_dataloader', None), 'train')
-        except Exception:
-            pass
-        try:
-            _inspect_loader(getattr(runner, 'val_dataloader', None), 'val')
-        except Exception:
-            pass
-        try:
-            _inspect_loader(getattr(runner, 'test_dataloader', None), 'test')
-        except Exception:
-            pass
+            elif torch.cuda.is_available() and use_cuda:
+                print('CUDA available and --cuda requested: leaving model on CUDA')
     except Exception:
         pass
 
     print('Starting runner.train()...')
     try:
-        # For debug runs we may want to avoid GPU OOMs. If CUDA is available,
-        # move the model to CPU to ensure the first iterations complete and
-        # produce deterministic, inspectable errors.
-        try:
-            import torch
-            # If the user provided an explicit device, try to move the model there.
-            if device is not None:
-                try:
-                    print(f'Moving model to device: {device}')
-                    runner.model.to(device)
-                except Exception:
-                    pass
-                try:
-                    dp = getattr(runner.model, 'data_preprocessor', None)
-                    if dp is not None and hasattr(dp, 'device'):
-                        dp.device = device
-                except Exception:
-                    pass
-            else:
-                # Default debug behaviour: move model to CPU when CUDA is available
-                # unless the user explicitly asked to use CUDA.
-                if torch.cuda.is_available() and not use_cuda:
-                    print('CUDA available: moving model to CPU for debug run to avoid OOM')
-                    try:
-                        runner.model.to('cpu')
-                    except Exception:
-                        pass
-                    try:
-                        # If the model has a data_preprocessor with a device field,
-                        # update it so inputs are processed on CPU.
-                        dp = getattr(runner.model, 'data_preprocessor', None)
-                        if dp is not None and hasattr(dp, 'device'):
-                            dp.device = 'cpu'
-                    except Exception:
-                        pass
-                elif torch.cuda.is_available() and use_cuda:
-                    print('CUDA available and --cuda requested: leaving model on CUDA')
-                else:
-                    # Either CUDA not available, or we're already on CPU — nothing to do.
-                    pass
-        except Exception:
-            pass
-        # On Windows multiprocessing spawn mode requires guarded main; we've used freeze_support below.
         runner.train()
     except Exception:
         print('Exception during runner.train():')
@@ -223,16 +253,12 @@ if __name__ == '__main__':
         freeze_support()
     except Exception:
         pass
-    # Lightweight CLI so users can override debug behaviour
-    try:
-        import argparse
 
-        parser = argparse.ArgumentParser(description='Run debug training with optional device control')
-        parser.add_argument('--cuda', action='store_true', help='Allow using CUDA device if available (default: move to CPU for debug)')
-        parser.add_argument('--device', type=str, default=None, help='Explicit device to move the model to, e.g. "cpu" or "cuda:0"')
-        args, unknown = parser.parse_known_args()
+    import argparse
 
-        main(use_cuda=args.cuda, device=args.device)
-    except Exception:
-        # Fallback to previous behaviour
-        main()
+    parser = argparse.ArgumentParser(description='Run debug training with optional device control')
+    parser.add_argument('--cuda', action='store_true', help='Allow using CUDA device if available (default: move to CPU for debug)')
+    parser.add_argument('--device', type=str, default=None, help='Explicit device to move the model to, e.g. "cpu" or "cuda:0"')
+    args, unknown = parser.parse_known_args()
+
+    main(use_cuda=args.cuda, device=args.device)
