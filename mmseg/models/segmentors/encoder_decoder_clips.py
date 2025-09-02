@@ -102,11 +102,121 @@ class EncoderDecoder_clips(BaseSegmentor):
             x = self.neck(x)
         return x
 
-    def encode_decode(self, inputs: Tensor, batch_img_metas: List[dict]) -> Tensor:
+    def encode_decode(self,
+                      inputs: Tensor,
+                      batch_img_metas: Optional[List[dict]] = None,
+                      batch_size: int = 1,
+                      num_clips: int = 1) -> Tensor:
         """Encode images with backbone and decode into a semantic segmentation
-        map of the same size as input."""
+        map of the same size as input.
+
+        Accepts optional ``batch_size`` and ``num_clips`` to support older
+        TV3S-style decode heads that expect these parameters during test-time
+        forward. If the decode head implements ``forward_test`` we forward
+        the extra args, otherwise fall back to the standard ``predict`` call.
+        """
         x = self.extract_feat(inputs)
-        seg_logits = self.decode_head.predict(x, batch_img_metas, self.test_cfg)
+        # Capture original metainfo for one-time debugging if it's malformed
+        orig_batch_img_metas = batch_img_metas
+        if not getattr(self, '_logged_bad_batch_img_metas', False):
+            problematic = False
+            try:
+                # consider None, non-dict, or missing pad_shape as problematic
+                if orig_batch_img_metas is None:
+                    problematic = True
+                else:
+                    for e in orig_batch_img_metas:
+                        if e is None or not isinstance(e, dict) or 'pad_shape' not in e:
+                            problematic = True
+                            break
+            except Exception:
+                problematic = True
+            if problematic:
+                # Log the raw problematic object once and raise to make it visible
+                print_log(
+                    f"ENCODE_DECODE DEBUG: bad batch_img_metas captured: {orig_batch_img_metas}",
+                    logger='mmseg',
+                    level=logging.WARNING)
+                # mark so we only log/assert once per model instance
+                self._logged_bad_batch_img_metas = True
+                # raise assertion to capture stack and halt (one-time debug)
+                raise AssertionError(f"Bad batch_img_metas captured in encode_decode: {orig_batch_img_metas}")
+        # Ensure batch_img_metas is present and contains expected keys used
+        # by decode heads (pad_shape, ori_shape, etc.). If not provided by
+        # the caller, synthesize minimal metadata from the input tensor
+        # shape so downstream predict_by_feat() calls don't fail.
+        if batch_img_metas is None:
+            h, w = inputs.shape[2], inputs.shape[3]
+            batch_img_metas = [{
+                'pad_shape': (h, w),
+                'ori_shape': (h, w),
+                'scale_factor': 1.0,
+                'flip': False
+            }]
+        else:
+            # Defensive: ensure first element has pad_shape/ori_shape
+            try:
+                if not batch_img_metas or batch_img_metas[0] is None:
+                    h, w = inputs.shape[2], inputs.shape[3]
+                    batch_img_metas = [{
+                        'pad_shape': (h, w),
+                        'ori_shape': (h, w),
+                        'scale_factor': 1.0,
+                        'flip': False
+                    }]
+            except Exception:
+                # If anything goes wrong, still synthesize safe default
+                h, w = inputs.shape[2], inputs.shape[3]
+                batch_img_metas = [{
+                    'pad_shape': (h, w),
+                    'ori_shape': (h, w),
+                    'scale_factor': 1.0,
+                    'flip': False
+                }]
+        # Make sure each element of batch_img_metas is a dict with the
+        # keys decode heads expect (pad_shape, ori_shape). Replace any
+        # None or non-dict entries with safe defaults derived from input
+        # spatial shape.
+        try:
+            h, w = inputs.shape[2], inputs.shape[3]
+        except Exception:
+            h, w = 0, 0
+        sanitized = []
+        for entry in batch_img_metas:
+            if not isinstance(entry, dict) or entry is None:
+                sanitized.append({
+                    'pad_shape': (h, w),
+                    'ori_shape': (h, w),
+                    'scale_factor': 1.0,
+                    'flip': False
+                })
+            else:
+                if 'pad_shape' not in entry or entry['pad_shape'] is None:
+                    entry['pad_shape'] = (h, w)
+                if 'ori_shape' not in entry or entry['ori_shape'] is None:
+                    entry['ori_shape'] = (h, w)
+                if 'scale_factor' not in entry:
+                    entry['scale_factor'] = 1.0
+                if 'flip' not in entry:
+                    entry['flip'] = False
+                sanitized.append(entry)
+        batch_img_metas = sanitized
+
+        # If decode head provides a test-time forward that accepts batch_size
+        # and num_clips, prefer that to preserve clip-aware logic.
+        if hasattr(self.decode_head, 'forward_test'):
+            seg_logits = self.decode_head.forward_test(
+                x, batch_img_metas, self.test_cfg, batch_size, num_clips)
+        else:
+            seg_logits = self.decode_head.predict(x, batch_img_metas,
+                                                  self.test_cfg)
+        # One-time debug: log seg_logits.shape to detect channel/shape issues
+        try:
+            if not getattr(self, '_logged_seg_logits_shape', False):
+                print_log(f'ENCODE_DECODE DEBUG: seg_logits.shape={getattr(seg_logits, "shape", None)}', logger='mmseg')
+                self._logged_seg_logits_shape = True
+        except Exception:
+            pass
         return seg_logits
 
     # # Used for FLOP calculation
@@ -264,12 +374,12 @@ class EncoderDecoder_clips(BaseSegmentor):
                 count_mat.cpu().detach().numpy()).to(device=img.device)
         preds = preds / count_mat
         if rescale:
-            preds = resize(
+            # use torch.nn.functional.interpolate instead of undefined resize
+            preds = F.interpolate(
                 preds,
-                size=img_meta[0]['ori_shape'][:2],
+                size=tuple(img_meta[0]['ori_shape'][:2]),
                 mode='bilinear',
-                align_corners=self.align_corners,
-                warning=False)
+                align_corners=self.align_corners)
         return preds
 
     def whole_inference(self, img, img_meta, rescale, batch_size, num_clips):
@@ -279,12 +389,12 @@ class EncoderDecoder_clips(BaseSegmentor):
         # print(seg_logit.shape)
         # print(img_meta[0]['ori_shape'][:2])
         if rescale:
-            seg_logit = resize(
+            # use torch.nn.functional.interpolate instead of undefined resize
+            seg_logit = F.interpolate(
                 seg_logit,
-                size=img_meta[0]['ori_shape'][:2],
+                size=tuple(img_meta[0]['ori_shape'][:2]),
                 mode='bilinear',
-                align_corners=self.align_corners,
-                warning=False)
+                align_corners=self.align_corners)
 
         return seg_logit
 
@@ -383,6 +493,33 @@ class EncoderDecoder_clips(BaseSegmentor):
         Attempts to extract gt_sem_seg tensors from data_samples and calls
         the existing forward_train implementation.
         """
+        # Build img_metas list if available
+        # One-time debug: capture inputs shape and data_samples metainfo to
+        # diagnose missing dataset metadata or malformed samples. This is
+        # deliberately guarded so it only prints once per model instance.
+        try:
+            if not getattr(self, '_logged_loss_inputs_and_meta', False):
+                try:
+                    inp_shape = None
+                    if isinstance(inputs, torch.Tensor):
+                        inp_shape = tuple(inputs.shape)
+                    elif isinstance(inputs, (list, tuple)) and len(inputs) > 0 and hasattr(inputs[0], 'shape'):
+                        inp_shape = tuple(getattr(inputs[0], 'shape', None))
+                    print_log(f'LOSS DEBUG: inputs.shape={inp_shape}', logger='mmseg')
+                    if data_samples is None:
+                        print_log('LOSS DEBUG: data_samples is None', logger='mmseg')
+                    else:
+                        try:
+                            first_meta = getattr(data_samples[0], 'metainfo', None)
+                        except Exception:
+                            first_meta = None
+                        print_log(f'LOSS DEBUG: data_samples[0].metainfo={first_meta}', logger='mmseg')
+                except Exception:
+                    pass
+                self._logged_loss_inputs_and_meta = True
+        except Exception:
+            pass
+
         # Build img_metas list if available
         img_metas = None
         if data_samples is not None:

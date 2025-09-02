@@ -215,6 +215,152 @@ class CustomDataset2(Dataset):
         self.label_map = None
         self.CLASSES, self.PALETTE = self.get_classes_and_palette(
             classes, palette)
+        # Expose dataset metainfo under common attribute names so evaluators,
+        # metrics and visualizers can find class names and palette. Some
+        # datasets in this repo (clips variants) previously did not expose
+        # these attributes which caused IoUMetric to infer a single class.
+        try:
+            _meta = {
+                'classes': list(self.CLASSES) if self.CLASSES is not None else None,
+                'palette': list(self.PALETTE) if self.PALETTE is not None else None,
+            }
+            try:
+                # instance-level backing used by mmengine/mmseg
+                self.metainfo = _meta
+            except Exception:
+                pass
+            try:
+                # older code paths look for dataset_meta
+                self.dataset_meta = _meta
+            except Exception:
+                pass
+            try:
+                # class-level alias used by some tooling
+                self.__class__.METAINFO = _meta
+            except Exception:
+                pass
+            try:
+                # convenience attribute
+                self.METAINFO = _meta
+            except Exception:
+                pass
+        except Exception:
+            # leave attributes absent on failure
+            pass
+        # Ensure dataset metadata is exposed under common attribute names so
+        # evaluators/metrics/visualizers can find class names and palette.
+        try:
+            _meta = {
+                'classes': list(self.CLASSES) if self.CLASSES is not None else None,
+                'palette': list(self.PALETTE) if self.PALETTE is not None else None,
+            }
+            try:
+                self.metainfo = _meta
+            except Exception:
+                pass
+            try:
+                self.dataset_meta = _meta
+            except Exception:
+                pass
+            try:
+                # class-level alias used by some tooling
+                self.__class__.METAINFO = _meta
+            except Exception:
+                pass
+            try:
+                self.METAINFO = _meta
+            except Exception:
+                pass
+        except Exception:
+            # leave attributes absent on failure
+            pass
+        # Populate standard metainfo attributes expected by mmengine/mmseg.
+        # Some evaluators/metrics/visualizers look for `METAINFO` (class-level),
+        # `metainfo` (instance-level), or `dataset_meta`. Set all three to be safe.
+        try:
+            _meta = {
+                'classes': list(self.CLASSES) if self.CLASSES is not None else None,
+                'palette': list(self.PALETTE) if self.PALETTE is not None else None,
+            }
+            # set instance-level attributes
+            try:
+                self.metainfo = _meta
+            except Exception:
+                pass
+            try:
+                self.dataset_meta = _meta
+            except Exception:
+                pass
+            # also set class-level alias for tooling that inspects the class
+            try:
+                self.__class__.METAINFO = _meta
+            except Exception:
+                pass
+        except Exception:
+            # if anything fails, leave attributes absent and let downstream
+            # code handle the missing metadata
+            pass
+        # Populate standard metainfo attributes expected by mmengine/mmseg.
+        # Some evaluators/metrics look for `METAINFO` (class-level),
+        # `metainfo` (instance), or `dataset_meta`. Set all three to be safe.
+        try:
+            _meta = {
+                'classes': list(self.CLASSES) if self.CLASSES is not None else None,
+                'palette': list(self.PALETTE) if self.PALETTE is not None else None,
+            }
+            # class-level alias used by some tooling
+            try:
+                self.METAINFO = _meta
+            except Exception:
+                pass
+            # instance-level attribute commonly referenced as `metainfo`
+            try:
+                self.metainfo = _meta
+            except Exception:
+                pass
+            # keep compatibility with earlier defensive code that used dataset_meta
+            try:
+                self.dataset_meta = _meta
+            except Exception:
+                pass
+        except Exception:
+            # leave attributes absent on failure
+            pass
+        # Ensure dataset_meta is populated for evaluators/visualizers/metrics.
+        # Some clip datasets didn't expose dataset_meta which caused downstream
+        # code to fall back to degenerate behavior. Populate a minimal dataset_meta here.
+        try:
+            self.dataset_meta = {
+                'classes': list(self.CLASSES) if self.CLASSES is not None else None,
+                'palette': list(self.PALETTE) if self.PALETTE is not None else None,
+            }
+        except Exception:
+            # keep compatibility if CLASSES/PALETTE are not list-like
+            self.dataset_meta = None
+        # Ensure dataset_meta is populated for evaluators/visualizers/metrics.
+        # Some custom clip datasets used in this repo didn't expose
+        # dataset_meta which caused downstream code to fall back to
+        # degenerate behavior. Populate a minimal dataset_meta here.
+        try:
+            self.dataset_meta = {
+                'classes': list(self.CLASSES) if self.CLASSES is not None else None,
+                'palette': list(self.PALETTE) if self.PALETTE is not None else None,
+            }
+        except Exception:
+            # keep compatibility if CLASSES/PALETTE are not list-like
+            self.dataset_meta = None
+        # Ensure dataset_meta is populated for evaluators/visualizers/metrics.
+        # Some custom clip datasets used in this repo did not expose
+        # dataset_meta which causes downstream code to fall back to
+        # degenerate behavior. Populate a minimal dataset_meta here.
+        try:
+            self.dataset_meta = {
+                'classes': list(self.CLASSES) if self.CLASSES is not None else None,
+                'palette': list(self.PALETTE) if self.PALETTE is not None else None
+            }
+        except Exception:
+            # keep compatibility if CLASSES/PALETTE are not list-like
+            self.dataset_meta = None
 
         # join paths if data_root is specified
         if self.data_root is not None:

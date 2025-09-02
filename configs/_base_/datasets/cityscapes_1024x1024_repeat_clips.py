@@ -7,6 +7,14 @@ img_norm_cfg = dict(
 # Reduce resolution by half to lower memory / I/O (was 1024x512 with 256x512 crop)
 crop_size = (128, 256)
 
+# Cityscapes class names (kept in sync with other cityscapes configs)
+used_labels = [
+    'road', 'sidewalk', 'building', 'wall', 'fence', 'pole',
+    'traffic_light', 'traffic_sign', 'vegetation', 'terrain', 'sky',
+    'person', 'rider', 'car', 'truck', 'bus', 'train', 'motorcycle',
+    'bicycle'
+]
+
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations'),
@@ -46,6 +54,7 @@ data = dict(
             img_dir='leftImg8bit_trainvaltest/train',
             ann_dir='gtFine/train',
             pipeline=train_pipeline,
+            used_labels=used_labels,
             dilation=[-9, -6, -3],
             istraining=True,
         ),
@@ -56,6 +65,7 @@ data = dict(
         img_dir='leftImg8bit_trainvaltest/val',
         ann_dir='gtFine/val',
         pipeline=test_pipeline,
+        used_labels=used_labels,
         dilation=[-9, -6, -3],
         istraining=False),
     test=dict(
@@ -64,5 +74,10 @@ data = dict(
         img_dir='leftImg8bit_trainvaltest/val',
         ann_dir='gtFine/val',
         pipeline=test_pipeline,
+        used_labels=used_labels,
         dilation=[-9, -6, -3],
         istraining=False))
+
+# Ensure evaluators are present so IoUMetric can pick up class names
+val_evaluator = dict(type='IoUMetric', iou_metrics=['mIoU'])
+test_evaluator = val_evaluator

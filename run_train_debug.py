@@ -109,6 +109,62 @@ def main(use_cuda: bool = False, device: str | None = None):
     runner = Runner.from_cfg(cfg)
     print('Runner created')
 
+    # One-time debug wrappers: inspect data_samples.metainfo when the model's
+    # loss() and predict() are first called. This helps determine whether the
+    # dataset instances expose `metainfo`/`dataset_meta` at runtime (the root
+    # cause for metrics falling back to a single generated class).
+    # One-time diagnostic: inspect the actual dataset instances used by the
+    # runner's dataloaders (train/val/test) and print their class and any
+    # metainfo-like attributes. This avoids wrapping model methods and is
+    # safer across different mmengine/mmseg versions.
+    try:
+        def _inspect_loader(loader, name):
+            try:
+                ds = getattr(loader, 'dataset', None)
+                print(f'DEBUG: {name} loader dataset type: {type(ds)}')
+                if ds is None:
+                    return
+                # Common attribute names to check
+                for attr in ('metainfo', 'dataset_meta', 'METAINFO', 'classes', 'CLASSES', 'PALETTE', 'palette'):
+                    try:
+                        val = getattr(ds, attr, None)
+                        if val is not None:
+                            print(f'DEBUG: {name} dataset.{attr} = {val}')
+                    except Exception as _e:
+                        print(f'DEBUG: error reading {attr} from {name} dataset: {_e}')
+                # If dataset is a wrapper (e.g., Subset), try to reach inner dataset
+                try:
+                    inner = getattr(ds, 'dataset', None)
+                    if inner is not None and inner is not ds:
+                        print(f'DEBUG: {name} inner dataset type: {type(inner)}')
+                        for attr in ('metainfo', 'dataset_meta', 'METAINFO', 'CLASSES'):
+                            try:
+                                val = getattr(inner, attr, None)
+                                if val is not None:
+                                    print(f'DEBUG: {name} inner.{attr} = {val}')
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
+        try:
+            # train loader
+            _inspect_loader(getattr(runner, 'train_dataloader', None), 'train')
+        except Exception:
+            pass
+        try:
+            _inspect_loader(getattr(runner, 'val_dataloader', None), 'val')
+        except Exception:
+            pass
+        try:
+            _inspect_loader(getattr(runner, 'test_dataloader', None), 'test')
+        except Exception:
+            pass
+    except Exception:
+        pass
+
     print('Starting runner.train()...')
     try:
         # For debug runs we may want to avoid GPU OOMs. If CUDA is available,

@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Sequence
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from mmengine.dist import is_main_process
 from mmengine.evaluator import BaseMetric
 from mmengine.logging import MMLogger, print_log
@@ -74,16 +75,135 @@ class IoUMetric(BaseMetric):
             data_batch (dict): A batch of data from the dataloader.
             data_samples (Sequence[dict]): A batch of outputs from the model.
         """
-        num_classes = len(self.dataset_meta['classes'])
+    # Defensive: dataset_meta may be None when dataset didn't provide
+    # metainfo (seen with CityscapesDataset_clips). First try a dataset
+    # class fallback, then infer number of classes from model prediction
+    # channels if necessary.
+        if not getattr(self, 'dataset_meta', None) or 'classes' not in self.dataset_meta:
+            # Cityscapes fallback: try to import dataset class and use its CLASSES/PALETTE
+            try:
+                import mmseg.datasets.cityscapes_video as _cs_mod
+                cls = getattr(_cs_mod, 'CityscapesDataset_clips', None)
+                if cls is not None and hasattr(cls, 'CLASSES'):
+                    self.dataset_meta = {'classes': tuple(getattr(cls, 'CLASSES'))}
+                    pal = getattr(cls, 'PALETTE', None)
+                    if pal is not None:
+                        self.dataset_meta['palette'] = pal
+                    try:
+                        print_log('IoUMetric: populated dataset_meta from CityscapesDataset_clips.CLASSES', logger='mmseg', level='INFO')
+                    except Exception:
+                        print('IoUMetric: populated dataset_meta from CityscapesDataset_clips.CLASSES')
+            except Exception:
+                pass
+
+            # If fallback succeeded, use it. Otherwise try to infer from prediction tensor shape.
+            if getattr(self, 'dataset_meta', None) and 'classes' in self.dataset_meta:
+                num_classes = len(self.dataset_meta['classes'])
+            else:
+                try:
+                    sample_pred = data_samples[0]['pred_sem_seg']['data']
+                    # prediction is (C, H, W) or (1, C, H, W)
+                    if hasattr(sample_pred, 'ndim') and sample_pred.ndim == 3:
+                        num_classes = sample_pred.shape[0]
+                    elif hasattr(sample_pred, 'ndim') and sample_pred.ndim == 4:
+                        num_classes = sample_pred.shape[1]
+                    else:
+                        # fallback conservative default
+                        num_classes = 19
+                    try:
+                        print_log(
+                            f"IoUMetric: dataset_meta missing, inferred num_classes={num_classes}",
+                            logger='mmseg',
+                            level='WARNING')
+                    except Exception:
+                        # MMLogger may not be initialized in some debug runs; fall back
+                        # to stdout to avoid crashing the evaluation loop.
+                        print(f"IoUMetric WARNING: dataset_meta missing, inferred num_classes={num_classes}")
+                except Exception:
+                    num_classes = 19
+                    try:
+                        print_log(
+                            "IoUMetric: unable to infer num_classes from data_samples; using default=19",
+                            logger='mmseg',
+                            level='WARNING')
+                    except Exception:
+                        print("IoUMetric WARNING: unable to infer num_classes from data_samples; using default=19")
+
+            # One-time diagnostic: print data_batch/data_samples structure to help
+            # identify where dataset class names might be available.
+            try:
+                if not getattr(self, '_logged_data_sample_structure', False):
+                    try:
+                        print_log(f'IoUMetric DEBUG: data_batch keys={list(data_batch.keys())}', logger='mmseg')
+                    except Exception:
+                        print(f'IoUMetric DEBUG: data_batch keys={list(data_batch.keys())}')
+                    try:
+                        sample_keys = list(data_samples[0].keys()) if len(data_samples) > 0 else None
+                        print_log(f'IoUMetric DEBUG: data_samples[0] keys={sample_keys}', logger='mmseg')
+                        # One-time: log which GT class ids appear in the first sample
+                        try:
+                            if not getattr(self, '_logged_label_values', False) and len(data_samples) > 0:
+                                gs = data_samples[0].get('gt_sem_seg')
+                                if gs is not None:
+                                    lab = gs.get('data', None)
+                                    if lab is not None:
+                                        try:
+                                            arr = lab.cpu().numpy()
+                                        except Exception:
+                                            arr = np.array(lab)
+                                        unique_vals = np.unique(arr)
+                                        try:
+                                            if getattr(self, 'dataset_meta', None) and 'classes' in self.dataset_meta:
+                                                names = [self.dataset_meta['classes'][int(v)] if 0 <= int(v) < len(self.dataset_meta['classes']) else str(int(v)) for v in unique_vals]
+                                                print_log(f'IoUMetric DEBUG: gt unique ids={list(unique_vals)}, names={names}', logger='mmseg')
+                                            else:
+                                                print_log(f'IoUMetric DEBUG: gt unique ids={list(unique_vals)}', logger='mmseg')
+                                        except Exception:
+                                            print(f'IoUMetric DEBUG: gt unique ids={list(unique_vals)}')
+                                self._logged_label_values = True
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
+                    self._logged_data_sample_structure = True
+            except Exception:
+                pass
+        else:
+            num_classes = len(self.dataset_meta['classes'])
         for data_sample in data_samples:
-            pred_label = data_sample['pred_sem_seg']['data'].squeeze()
+            pred_label = data_sample['pred_sem_seg']['data']
+            # Normalize prediction tensor to a 2D class map (H, W).
+            # Possible shapes: (C, H, W), (1, C, H, W), (H, W) or (1, H, W).
+            if hasattr(pred_label, 'ndim') and pred_label.ndim == 4:
+                # (1, C, H, W) -> (C, H, W)
+                pred_label = pred_label.squeeze(0)
+            if hasattr(pred_label, 'ndim') and pred_label.ndim == 3:
+                # (C, H, W) -> class map by argmax over channels
+                pred_label = pred_label.argmax(dim=0)
+            else:
+                # ensure it's 2D
+                pred_label = pred_label.squeeze()
             # format_only always for test dataset without ground truth
             if not self.format_only:
-                label = data_sample['gt_sem_seg']['data'].squeeze().to(
-                    pred_label)
-                self.results.append(
-                    self.intersect_and_union(pred_label, label, num_classes,
-                                             self.ignore_index))
+                label = data_sample['gt_sem_seg']['data'].squeeze()
+                # If shapes mismatch, resize prediction to match label using nearest
+                if pred_label.shape != label.shape:
+                    try:
+                        # make float for interpolation then restore integer class labels
+                        pred_label = pred_label.unsqueeze(0).unsqueeze(0).float()
+                        pred_label = F.interpolate(
+                            pred_label, size=tuple(label.shape), mode='nearest')
+                        pred_label = pred_label.squeeze().to(label.dtype)
+                    except Exception:
+                        # As a fallback, attempt to transpose if dimensions are swapped
+                        try:
+                            pred_label = pred_label.transpose(0, 1)
+                        except Exception:
+                            pass
+                label = label.to(pred_label)
+                self.results.append(self.intersect_and_union(pred_label, label,
+                                                             num_classes,
+                                                             self.ignore_index))
             # format_result
             if self.output_dir is not None:
                 basename = osp.splitext(osp.basename(
@@ -129,7 +249,41 @@ class IoUMetric(BaseMetric):
             total_area_intersect, total_area_union, total_area_pred_label,
             total_area_label, self.metrics, self.nan_to_num, self.beta)
 
-        class_names = self.dataset_meta['classes']
+        # One-time diagnostic: which class indices actually appear in GT
+        try:
+            present = np.where(np.array(total_area_label) > 0)[0]
+            if len(present) == 0:
+                try:
+                    print_log('IoUMetric DEBUG: no ground-truth pixels found for any class in this evaluation set', logger='mmseg')
+                except Exception:
+                    print('IoUMetric DEBUG: no ground-truth pixels found for any class in this evaluation set')
+            else:
+                try:
+                    if getattr(self, 'dataset_meta', None) and 'classes' in self.dataset_meta:
+                        names = [self.dataset_meta['classes'][int(i)] for i in present]
+                        print_log(f'IoUMetric DEBUG: gt present class indices={list(present)}, names={names}', logger='mmseg')
+                    else:
+                        print_log(f'IoUMetric DEBUG: gt present class indices={list(present)}', logger='mmseg')
+                except Exception:
+                    print(f'IoUMetric DEBUG: gt present class indices={list(present)}')
+        except Exception:
+            pass
+
+        # Defensive: dataset_meta may be None for some custom datasets.
+        # Fall back to generated class names based on the number of classes
+        # inferred from the accumulated histogram arrays.
+        if getattr(self, 'dataset_meta', None) and 'classes' in self.dataset_meta:
+            class_names = self.dataset_meta['classes']
+        else:
+            num_classes = len(total_area_intersect)
+            try:
+                print_log(
+                    f"IoUMetric: dataset_meta missing, using generated class names for {num_classes} classes",
+                    logger='mmseg',
+                    level='WARNING')
+            except Exception:
+                print(f"IoUMetric WARNING: dataset_meta missing, using generated class names for {num_classes} classes")
+            class_names = [f'class_{i}' for i in range(num_classes)]
 
         # summary table
         ret_metrics_summary = OrderedDict({
@@ -149,14 +303,46 @@ class IoUMetric(BaseMetric):
             ret_metric: np.round(ret_metric_value * 100, 2)
             for ret_metric, ret_metric_value in ret_metrics.items()
         })
+        # Prepare a human-friendly per-class table. Replace NaN with '-' so
+        # absent classes (no GT pixels) are clearly shown, and ensure all
+        # columns have matching lengths.
         ret_metrics_class.update({'Class': class_names})
         ret_metrics_class.move_to_end('Class', last=False)
-        class_table_data = PrettyTable()
+
+        # Convert numeric arrays to lists of display strings, preserving
+        # the ability to return numeric metrics separately.
+        display_metrics = OrderedDict()
         for key, val in ret_metrics_class.items():
+            # Class column is already strings
+            if key == 'Class':
+                display_metrics[key] = list(val)
+                continue
+
+            # Ensure we operate on a numpy array for isnan checks
+            arr = np.array(val)
+            disp_list = []
+            for v in arr:
+                if np.isnan(v):
+                    disp_list.append('-')
+                else:
+                    # keep two decimal places for readability
+                    try:
+                        disp_list.append(f"{float(v):.2f}")
+                    except Exception:
+                        disp_list.append(str(v))
+            display_metrics[key] = disp_list
+
+        class_table_data = PrettyTable()
+        for key, val in display_metrics.items():
             class_table_data.add_column(key, val)
 
-        print_log('per class results:', logger)
-        print_log('\n' + class_table_data.get_string(), logger=logger)
+        try:
+            print_log('per class results:', logger)
+            print_log('\n' + class_table_data.get_string(), logger=logger)
+        except Exception:
+            # Fallback to stdout in case the MMLogger instance isn't available.
+            print('per class results:')
+            print('\n' + class_table_data.get_string())
 
         return metrics
 
