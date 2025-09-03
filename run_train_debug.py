@@ -6,8 +6,9 @@ import mmseg
 sys.path.insert(0, '.')
 
 def _get_logger():
-    import mmengine
-    return mmengine.get_logger(__name__)
+    from mmengine.logging import MMLogger
+    logger = MMLogger.get_current_instance()
+    return logger
 
 
 def _get_last_checkpoint_path(cfg):
