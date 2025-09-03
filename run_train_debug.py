@@ -6,16 +6,8 @@ import mmseg
 sys.path.insert(0, '.')
 
 def _get_logger():
-    try:
-        import mmengine
-
-        try:
-            return mmengine.get_logger(__name__)
-        except Exception:
-            # Older mmengine installs may not expose get_logger in the same way
-            return None
-    except Exception:
-        return None
+    import mmengine
+    return mmengine.get_logger(__name__)
 
 
 def _get_last_checkpoint_path(cfg):
@@ -265,7 +257,7 @@ if __name__ == '__main__':
 
         main(use_cuda=args.cuda, device=args.device)
     except KeyboardInterrupt:
-        print('🚩 Training interrupted by user')
-        import os
-        os._exit(0)
+        print('🚩🚩🚩🚩🚩🚩🚩 Training interrupted by user')
+        import sys
+        sys.exit(0)
     
