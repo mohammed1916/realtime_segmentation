@@ -60,11 +60,11 @@ img_norm_cfg = dict(
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations'),
-    dict(
-        type='RandomResize',
-        scale=(512, 256),
-        ratio_range=(0.5, 2.0),
-        keep_ratio=True),
+    # dict(
+    #     type='RandomResize',
+    #     scale=(512, 256),
+    #     ratio_range=(0.5, 2.0),
+    #     keep_ratio=True),
     dict(type='RandomCrop_clips', crop_size=crop_size, cat_max_ratio=0.75),
     dict(type='RandomFlip_clips', prob=0.5),
     dict(type='PhotoMetricDistortion_clips'),
@@ -86,7 +86,7 @@ data = dict(
     train=dict(
         type=dataset_type,
         data_root=data_root,
-        img_dir='leftImg8bit/train',
+        img_dir='leftImg8bit_trainvaltest/train',
         ann_dir='gtFine/train',
         pipeline=train_pipeline,
         dilation=[-9, -6, -3],  # Frame offsets for 9-frame temporal clip
@@ -96,7 +96,7 @@ data = dict(
     val=dict(
         type=dataset_type,
         data_root=data_root,
-        img_dir='leftImg8bit/val',
+        img_dir='leftImg8bit_trainvaltest/val',
         ann_dir='gtFine/val',
         pipeline=test_pipeline,
         dilation=[-9, -6, -3],
@@ -106,7 +106,7 @@ data = dict(
     test=dict(
         type=dataset_type,
         data_root=data_root,
-        img_dir='leftImg8bit/val',
+        img_dir='leftImg8bit_trainvaltest/val',
         ann_dir='gtFine/val',
         pipeline=test_pipeline,
         dilation=[-9, -6, -3],
@@ -135,7 +135,9 @@ val_dataloader = dict(
 test_dataloader = val_dataloader
 
 # Training configuration
+# Prevent merging IterBasedTrainLoop keys (like max_iters) from the base schedule.
 train_cfg = dict(
+    _delete_=True,
     type='EpochBasedTrainLoop',
     max_epochs=160,
     val_interval=10,
@@ -145,18 +147,7 @@ train_cfg = dict(
 val_evaluator = dict(type='IoUMetric', iou_metrics=['mIoU'])
 test_evaluator = val_evaluator
 
-# Optimizer configuration - override base SGD optimizer from schedule_160k
-# to use AdamW (no momentum arg)
-optim_wrapper = dict(
-    type='OptimWrapper',
-    optimizer=dict(type='AdamW', lr=0.00006, betas=(0.9, 0.999), weight_decay=0.01),
-    paramwise_cfg=dict(
-        custom_keys={
-            'pos_block': dict(decay_mult=0.),
-            'norm': dict(decay_mult=0.),
-            'head': dict(lr_mult=10.)
-        }))
-optimizer = dict(type='AdamW', lr=0.00006, betas=(0.9, 0.999), weight_decay=0.01)
+
 
 # Learning rate scheduler
 param_scheduler = [
@@ -177,7 +168,7 @@ default_hooks = dict(
     timer=dict(type='IterTimerHook'),
     logger=dict(type='LoggerHook', interval=50),
     param_scheduler=dict(type='ParamSchedulerHook'),
-    checkpoint=dict(type='CheckpointHook', interval=10, save_best='mIoU'),
+    checkpoint=dict(type='CheckpointHook', interval=160, save_best='mIoU'),
     sampler_seed=dict(type='DistSamplerSeedHook'),
     visualization=dict(type='SegVisualizationHook', draw=True, interval=10)
 )

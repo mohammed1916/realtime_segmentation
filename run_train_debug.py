@@ -1,6 +1,7 @@
 import os
 import sys
 import traceback
+import mmseg 
 
 sys.path.insert(0, '.')
 
@@ -192,7 +193,6 @@ def main(use_cuda=False, device=None):
             register_all_modules()
     except Exception:
         pass
-
     # Load the config used for training
     cfg_path = 'local_configs/segformer/segformer_cityscapes_video.py'
     if not os.path.exists(cfg_path):
@@ -241,6 +241,9 @@ def main(use_cuda=False, device=None):
     print('Starting runner.train()...')
     try:
         runner.train()
+
+    except KeyboardInterrupt:
+        print('🚩 Training interrupted by user')
     except Exception:
         print('Exception during runner.train():')
         traceback.print_exc()
@@ -251,14 +254,18 @@ if __name__ == '__main__':
     try:
         from multiprocessing import freeze_support
         freeze_support()
-    except Exception:
-        pass
 
-    import argparse
 
-    parser = argparse.ArgumentParser(description='Run debug training with optional device control')
-    parser.add_argument('--cuda', action='store_true', help='Allow using CUDA device if available (default: move to CPU for debug)')
-    parser.add_argument('--device', type=str, default=None, help='Explicit device to move the model to, e.g. "cpu" or "cuda:0"')
-    args, unknown = parser.parse_known_args()
+        import argparse
 
-    main(use_cuda=args.cuda, device=args.device)
+        parser = argparse.ArgumentParser(description='Run debug training with optional device control')
+        parser.add_argument('--cuda', action='store_true', help='Allow using CUDA device if available (default: move to CPU for debug)')
+        parser.add_argument('--device', type=str, default=None, help='Explicit device to move the model to, e.g. "cpu" or "cuda:0"')
+        args, unknown = parser.parse_known_args()
+
+        main(use_cuda=args.cuda, device=args.device)
+    except KeyboardInterrupt:
+        print('🚩 Training interrupted by user')
+        import os
+        os._exit(0)
+    
