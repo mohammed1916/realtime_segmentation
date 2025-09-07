@@ -1,10 +1,11 @@
+import mmengine
 import numpy as np
 import torch
 import mmcv
 import os.path as osp
 
 from mmseg.datasets import PIPELINES
-from mmseg.datasets.pipelines import to_tensor
+from mmengine.structures import BaseDataElement
 from mmcv.parallel import DataContainer as DC
 
 
@@ -35,17 +36,27 @@ class ImageToTensor_clips(object):
                 to :obj:`torch.Tensor` and transposed to (C, H, W) order.
         """
 
+        # wrap into BaseDataElement for consistent attribute access
+        wrapped = False
+        if not isinstance(results, BaseDataElement):
+            wrapped = True
+            results = BaseDataElement(**results)
+
         for key in self.keys:
-            assert isinstance(results[key], list)
-            img_all=[]
-            for im_one in results[key]:
+            assert isinstance(getattr(results, key), list)
+            img_all = []
+            for im_one in getattr(results, key):
                 img = im_one
                 if len(img.shape) < 3:
                     img = np.expand_dims(img, -1)
-                img=to_tensor(img.transpose(2, 0, 1))
-                img_all.append(img)
-            results[key] = img_all
-        return results
+                # make contiguous, transpose to (C, H, W) and convert to torch tensor
+                arr = np.ascontiguousarray(img.transpose(2, 0, 1))
+                t = torch.from_numpy(arr)
+                img_all.append(t)
+            setattr(results, key, img_all)
+
+        # return same type as input
+        return results.to_dict() if wrapped else results
 
     def __repr__(self):
         return self.__class__.__name__ + f'(keys={self.keys})'
@@ -74,29 +85,37 @@ class DefaultFormatBundle_clips(object):
                 default bundle.
         """
 
+        # wrap into BaseDataElement for consistent attribute access
+        wrapped = False
+        if not isinstance(results, BaseDataElement):
+            wrapped = True
+            results = BaseDataElement(**results)
+
         if 'img' in results:
-            assert isinstance(results['img'], list)
-            img_all=[]
-            for im in results['img']:
-                # img = results['img']
+            imgs = getattr(results, 'img')
+            assert isinstance(imgs, list)
+            img_all = []
+            for im in imgs:
                 if len(im.shape) < 3:
                     im = np.expand_dims(im, -1)
-                img = np.ascontiguousarray(im.transpose(2, 0, 1))
-                img_all.append(to_tensor(img))
-            img_all=torch.stack(img_all)
-            results['img'] = DC(img_all, stack=True)
+                arr = np.ascontiguousarray(im.transpose(2, 0, 1))
+                img_all.append(torch.from_numpy(arr))
+            img_all = torch.stack(img_all)
+            setattr(results, 'img', DC(img_all, stack=True))
         if 'gt_semantic_seg' in results:
             # convert to long
-            gt_seg_all=[]
-            assert isinstance(results['gt_semantic_seg'], list)
-            for gt in results['gt_semantic_seg']:
-                gt_one= to_tensor(gt[None,
-                                                         ...].astype(np.int64))
-                    
+            gt_seg_all = []
+            gts = getattr(results, 'gt_semantic_seg')
+            assert isinstance(gts, list)
+            for gt in gts:
+                arr = gt[None, ...].astype(np.int64)
+                gt_one = torch.from_numpy(arr)
                 gt_seg_all.append(gt_one)
-            gt_seg_all=torch.stack(gt_seg_all)
-            results['gt_semantic_seg']=DC(gt_seg_all, stack=True)
-        return results
+            gt_seg_all = torch.stack(gt_seg_all)
+            setattr(results, 'gt_semantic_seg', DC(gt_seg_all, stack=True))
+
+        # return same type as input
+        return results.to_dict() if wrapped else results
 
     def __repr__(self):
         return self.__class__.__name__
@@ -124,41 +143,49 @@ class DefaultFormatBundle_clips2(object):
                 default bundle.
         """
 
+        # wrap into BaseDataElement for consistent attribute access
+        wrapped = False
+        if not isinstance(results, BaseDataElement):
+            wrapped = True
+            results = BaseDataElement(**results)
+
         if 'img' in results:
-            assert isinstance(results['img'], list)
-            img_all=[]
-            for im in results['img']:
-                # img = results['img']
+            imgs = getattr(results, 'img')
+            assert isinstance(imgs, list)
+            img_all = []
+            for im in imgs:
                 if len(im.shape) < 3:
                     im = np.expand_dims(im, -1)
-                img = np.ascontiguousarray(im.transpose(2, 0, 1))
-                img_all.append(to_tensor(img))
-            img_all=torch.stack(img_all)
+                arr = np.ascontiguousarray(im.transpose(2, 0, 1))
+                img_all.append(torch.from_numpy(arr))
+            img_all = torch.stack(img_all)
 
-            assert isinstance(results['img_beforeDistortion'], list)
-            img_all_old=[]
-            for im in results['img_beforeDistortion']:
-                # img = results['img']
+            img_old = getattr(results, 'img_beforeDistortion')
+            assert isinstance(img_old, list)
+            img_all_old = []
+            for im in img_old:
                 if len(im.shape) < 3:
                     im = np.expand_dims(im, -1)
-                img = np.ascontiguousarray(im.transpose(2, 0, 1))
-                img_all_old.append(to_tensor(img))
-            img_all_old=torch.stack(img_all_old)
+                arr = np.ascontiguousarray(im.transpose(2, 0, 1))
+                img_all_old.append(torch.from_numpy(arr))
+            img_all_old = torch.stack(img_all_old)
 
-            img_all=torch.stack([img_all,img_all_old])
-            results['img'] = DC(img_all, stack=True)
+            img_all = torch.stack([img_all, img_all_old])
+            setattr(results, 'img', DC(img_all, stack=True))
         if 'gt_semantic_seg' in results:
             # convert to long
-            gt_seg_all=[]
-            assert isinstance(results['gt_semantic_seg'], list)
-            for gt in results['gt_semantic_seg']:
-                gt_one= to_tensor(gt[None,
-                                                         ...].astype(np.int64))
-                    
+            gt_seg_all = []
+            gts = getattr(results, 'gt_semantic_seg')
+            assert isinstance(gts, list)
+            for gt in gts:
+                arr = gt[None, ...].astype(np.int64)
+                gt_one = torch.from_numpy(arr)
                 gt_seg_all.append(gt_one)
-            gt_seg_all=torch.stack(gt_seg_all)
-            results['gt_semantic_seg']=DC(gt_seg_all, stack=True)
-        return results
+            gt_seg_all = torch.stack(gt_seg_all)
+            setattr(results, 'gt_semantic_seg', DC(gt_seg_all, stack=True))
+
+        # return same type as input
+        return results.to_dict() if wrapped else results
 
     def __repr__(self):
         return self.__class__.__name__
@@ -200,7 +227,7 @@ class LoadAnnotations_ivps(object):
         """
 
         if self.file_client is None:
-            self.file_client = mmcv.FileClient(**self.file_client_args)
+            self.file_client = mmengine.fileio.FileClient(**self.file_client_args)
 
         if results.get('seg_prefix', None) is not None:
             filename = osp.join(results['seg_prefix'],
