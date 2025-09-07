@@ -27,6 +27,7 @@ class EncoderDecoder_clips(BaseSegmentor):
                  neck=None,
                  auxiliary_head=None,
                  train_cfg=None,
+                 val_cfg=None,
                  test_cfg=None,
                  data_preprocessor=None,
                  pretrained=None,

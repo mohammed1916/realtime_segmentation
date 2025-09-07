@@ -73,9 +73,11 @@ model = dict(
             type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0)
     ),
     train_cfg=dict(),
+    val_cfg=dict(),
     test_cfg=dict(mode='whole')
 )
-
+val_cfg=dict()
+test_cfg=dict()
 # =====================
 # Dataset configuration
 # =====================
@@ -85,21 +87,37 @@ img_dir = 'leftImg8bit_trainvaltest'
 ann_dir = 'gtFine'
 crop_size = (128, 256)
 
+# Normalization config used by Normalize_clips below
+img_norm_cfg = dict(
+    mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
+
 train_pipeline = [
-    dict(type='LoadImageFromFile'),
-    dict(type='LoadAnnotations'),
     dict(type='RandomCrop_clips', crop_size=crop_size, cat_max_ratio=0.75),
     dict(type='RandomFlip_clips', prob=0.5),
     dict(type='PhotoMetricDistortion_clips'),
-    dict(type='PackSegInputs')
+    dict(type='Normalize_clips', **img_norm_cfg),
+    dict(type='Pad_clips', size=crop_size, pad_val=0, seg_pad_val=255),
+    # Collect → PackSegInputs
+    dict(
+        type='PackSegInputs',
+        meta_keys=('img_path', 'seg_map_path', 'ori_shape', 'img_shape',
+                   'pad_shape', 'scale_factor')
+    )
 ]
 
 test_pipeline = [
-    dict(type='LoadImageFromFile'),
-    dict(type='Resize', scale=(512, 256), keep_ratio=True),
-    dict(type='LoadAnnotations'),
-    dict(type='PackSegInputs')
+    dict(type='RandomCrop_clips', crop_size=crop_size, cat_max_ratio=0.75),  # same as train
+    # dict(type='RandomFlip_clips', prob=0.5),  # optional, usually False for test
+    # dict(type='PhotoMetricDistortion_clips'), # optional, usually disabled for test
+    dict(type='Normalize_clips', **img_norm_cfg),
+    dict(type='Pad_clips', size=crop_size, pad_val=0, seg_pad_val=255),
+    dict(
+        type='PackSegInputs',
+        meta_keys=('img_path', 'seg_map_path', 'ori_shape', 'img_shape',
+                   'pad_shape', 'scale_factor')
+    )
 ]
+
 
 data = dict(
     samples_per_gpu=1,
@@ -112,7 +130,7 @@ data = dict(
         pipeline=train_pipeline,
         dilation=[-9, -6, -3],
         istraining=True,
-        mamba_mode=False,
+        # mamba_mode=False,
     ),
     val=dict(
         type=dataset_type,
@@ -122,7 +140,7 @@ data = dict(
         pipeline=test_pipeline,
         dilation=[-9, -6, -3],
         istraining=False,
-        mamba_mode=False,
+        # mamba_mode=False,
     ),
     test=dict(
         type=dataset_type,
@@ -132,7 +150,7 @@ data = dict(
         pipeline=test_pipeline,
         dilation=[-9, -6, -3],
         istraining=False,
-        mamba_mode=False,
+        # mamba_mode=False,
     )
 )
 
@@ -158,10 +176,10 @@ test_dataloader = val_dataloader
 # Training configuration (override)
 # =====================
 train_cfg = dict(
-    _delete_=True,
+    # _delete_=True,
     type='EpochBasedTrainLoop',
     max_epochs=16000,
-    val_interval=10,
+    val_interval=100,
 )
 
 # =====================

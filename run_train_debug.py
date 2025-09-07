@@ -192,6 +192,8 @@ def main(use_cuda=False, device=None):
         print(f'Config file not found: {cfg_path}')
         return
     cfg = mmengine.Config.fromfile(cfg_path)
+    print("Model num_classes:", cfg.model.decode_head.num_classes)
+
 
     # Ensure work_dir exists
     work_dir = getattr(cfg, 'work_dir', None)

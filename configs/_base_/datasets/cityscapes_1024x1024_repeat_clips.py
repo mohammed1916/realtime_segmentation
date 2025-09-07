@@ -1,13 +1,16 @@
 # dataset settings (LOW-RES pretraining)
 dataset_type = 'CityscapesDataset_clips'
-# Use a separate preprocessed dataset folder to avoid runtime resizing and memory spikes
 data_root = 'dataset_preprocessed'
+
 img_norm_cfg = dict(
-    mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
-# Reduce resolution by half to lower memory / I/O (was 1024x512 with 256x512 crop)
+    mean=[123.675, 116.28, 103.53],
+    std=[58.395, 57.12, 57.375],
+    to_rgb=True
+)
+
 crop_size = (128, 256)
 
-# Cityscapes class names (kept in sync with other cityscapes configs)
+# Cityscapes class names
 used_labels = [
     'road', 'sidewalk', 'building', 'wall', 'fence', 'pole',
     'traffic_light', 'traffic_sign', 'vegetation', 'terrain', 'sky',
@@ -15,10 +18,13 @@ used_labels = [
     'bicycle'
 ]
 
+# --------------------------
+# Training pipeline
+# --------------------------
 train_pipeline = [
-    dict(type='LoadImageFromFile'),
-    dict(type='LoadAnnotations'),
-    dict(type='Resize', img_scale=(512, 256), keep_ratio=True, process_clips=True),
+    dict(type='LoadImageFromFile_clips'),        # clip-safe loader
+    dict(type='LoadAnnotations'),                # fine, works on masks
+    dict(type='Resize_clips', img_scale=(512, 256), keep_ratio=True),
     dict(type='RandomCrop_clips', crop_size=crop_size, cat_max_ratio=0.75),
     dict(type='RandomFlip_clips', prob=0.5),
     dict(type='PhotoMetricDistortion_clips'),
@@ -28,22 +34,29 @@ train_pipeline = [
     dict(type='Collect', keys=['img', 'gt_semantic_seg']),
 ]
 
+# --------------------------
+# Validation / Test pipeline
+# --------------------------
 test_pipeline = [
-    dict(type='LoadImageFromFile'),
+    dict(type='LoadImageFromFile_clips'),
     dict(
-    type='MultiScaleFlipAug',
-    img_scale=(512, 256),
+        type='MultiScaleFlipAug',
+        img_scale=(512, 256),
         flip=False,
         transforms=[
-            dict(type='Resize', keep_ratio=True, process_clips=True),
+            dict(type='Resize_clips', keep_ratio=True),
             dict(type='Normalize_clips', **img_norm_cfg),
             dict(type='ImageToTensor_clips', keys=['img']),
             dict(type='Collect', keys=['img']),
-        ])
+        ]
+    )
 ]
 
+# --------------------------
+# Dataset config
+# --------------------------
 data = dict(
-    samples_per_gpu=1,   
+    samples_per_gpu=1,
     workers_per_gpu=2,
     train=dict(
         type='RepeatDataset',
@@ -67,7 +80,8 @@ data = dict(
         pipeline=test_pipeline,
         used_labels=used_labels,
         dilation=[-9, -6, -3],
-        istraining=False),
+        istraining=False
+    ),
     test=dict(
         type=dataset_type,
         data_root=data_root,
@@ -76,8 +90,9 @@ data = dict(
         pipeline=test_pipeline,
         used_labels=used_labels,
         dilation=[-9, -6, -3],
-        istraining=False))
+        istraining=False
+    )
+)
 
-# Ensure evaluators are present so IoUMetric can pick up class names
 val_evaluator = dict(type='IoUMetric', iou_metrics=['mIoU'])
 test_evaluator = val_evaluator

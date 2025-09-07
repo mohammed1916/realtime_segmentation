@@ -3,6 +3,8 @@ import warnings
 from pathlib import Path
 from typing import Dict, Optional, Union
 
+import torch
+from mmcv.transforms import to_tensor
 import mmcv
 import os
 import mmengine.fileio as fileio
@@ -19,6 +21,55 @@ try:
 except ImportError:
     gdal = None
 
+@TRANSFORMS.register_module()
+class DefaultFormatBundle_clips(object):
+    """Default formatting bundle.
+
+    It simplifies the pipeline of formatting common fields, including "img"
+    and "gt_semantic_seg". These fields are formatted as follows.
+
+    - img: (1)transpose, (2)to tensor, (3)to DataContainer (stack=True)
+    - gt_semantic_seg: (1)unsqueeze dim-0 (2)to tensor,
+                       (3)to DataContainer (stack=True)
+    """
+
+    def __call__(self, results):
+        """Call function to transform and format common fields in results.
+
+        Args:
+            results (dict): Result dict contains the data to convert.
+
+        Returns:
+            dict: The result dict contains the data that is formatted with
+                default bundle.
+        """
+
+        if 'img' in results:
+            assert isinstance(results['img'], list)
+            img_all=[]
+            for im in results['img']:
+                # img = results['img']
+                if len(im.shape) < 3:
+                    im = np.expand_dims(im, -1)
+                img = np.ascontiguousarray(im.transpose(2, 0, 1))
+                img_all.append(to_tensor(img))
+            img_all=torch.stack(img_all)
+            results['img'] = DC(img_all, stack=True)
+        if 'gt_semantic_seg' in results:
+            # convert to long
+            gt_seg_all=[]
+            assert isinstance(results['gt_semantic_seg'], list)
+            for gt in results['gt_semantic_seg']:
+                gt_one= to_tensor(gt[None,
+                                                         ...].astype(np.int64))
+                    
+                gt_seg_all.append(gt_one)
+            gt_seg_all=torch.stack(gt_seg_all)
+            results['gt_semantic_seg']=DC(gt_seg_all, stack=True)
+        return results
+
+    def __repr__(self):
+        return self.__class__.__name__
 
 @TRANSFORMS.register_module()
 class LoadAnnotations(MMCV_LoadAnnotations):
