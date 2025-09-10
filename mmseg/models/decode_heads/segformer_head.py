@@ -72,3 +72,12 @@ class SegformerHead(BaseDecodeHead):
         out = self.cls_seg(out)
 
         return out
+
+# Also register the head under the class-name spelling 'SegformerHead' so configs
+# that use either 'SegFormerHead' or 'SegformerHead' (different capitalisation)
+# will both resolve against the registry.
+try:
+    MODELS.register_module(name='SegformerHead')(SegformerHead)
+except Exception:
+    # If double-registration fails for any reason, ignore to preserve backward-compat
+    pass

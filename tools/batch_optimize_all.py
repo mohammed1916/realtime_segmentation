@@ -25,6 +25,22 @@ def get_model_config_mapping():
     # Updated mapping: add short checkpoint names used in this repo (seg_bX_ade/city)
     # Config paths point to the SegFormer local_configs layout; adjust if your repo differs.
     return {
+    # Long-form pretrained names (present at repo root) -> map to same mit-b* configs
+    'segformer.b0.1024x1024.city.160k.pth': 'local_configs/segformer/segformer_mit-b0_8xb1-160k_cityscapes-1024x1024.py',
+    'segformer.b0.512x512.ade.160k.pth': 'local_configs/segformer/segformer_mit-b0_8xb2-160k_ade20k-512x512.py',
+    'segformer.b1.1024x1024.city.160k.pth': 'local_configs/segformer/segformer_mit-b1_8xb1-160k_cityscapes-1024x1024.py',
+    'segformer.b1.512x512.ade.160k.pth': 'local_configs/segformer/segformer_mit-b1_8xb2-160k_ade20k-512x512.py',
+    'segformer.b2.1024x1024.city.160k.pth': 'local_configs/segformer/segformer_mit-b2_8xb1-160k_cityscapes-1024x1024.py',
+    'segformer.b2.512x512.ade.160k.pth': 'local_configs/segformer/segformer_mit-b2_8xb2-160k_ade20k-512x512.py',
+    'segformer.b3.1024x1024.city.160k.pth': 'local_configs/segformer/segformer_mit-b3_8xb1-160k_cityscapes-1024x1024.py',
+    'segformer.b3.512x512.ade.160k.pth': 'local_configs/segformer/segformer_mit-b3_8xb2-160k_ade20k-512x512.py',
+    'segformer.b4.1024x1024.city.160k.pth': 'local_configs/segformer/segformer_mit-b4_8xb1-160k_cityscapes-1024x1024.py',
+    'segformer.b4.512x512.ade.160k.pth': 'local_configs/segformer/segformer_mit-b4_8xb2-160k_ade20k-512x512.py',
+    'segformer.b5.1024x1024.city.160k.pth': 'local_configs/segformer/segformer_mit-b5_8xb1-160k_cityscapes-1024x1024.py',
+    'segformer.b5.640x640.ade.160k.pth': 'local_configs/segformer/segformer_mit-b5_8xb2-160k_ade20k-640x640.py',
+    # alternate underscore-named checkpoints
+    'segformer_b0_ade20k.pth': 'local_configs/segformer/segformer_mit-b0_8xb2-160k_ade20k-512x512.py',
+    'segformer_b3_ade20k.pth': 'local_configs/segformer/segformer_mit-b3_8xb2-160k_ade20k-512x512.py',
         #   'segformer.b0.1024x1024.city.160k.pth': 'local_configs/segformer/segformer_mit-b0_8xb1-160k_cityscapes-1024x1024.py',
         # 'segformer.b0.512x1024.city.160k.pth': 'local_configs/segformer/segformer_mit-b0_8xb1-160k_cityscapes-1024x1024.py',
         # 'segformer.b0.512x512.ade.160k.pth': 'local_configs/segformer/segformer_mit-b0_8xb2-160k_ade20k-512x512.py',
@@ -37,28 +53,29 @@ def get_model_config_mapping():
         # 'segformer.b4.512x512.ade.160k.pth': 'local_configs/segformer/segformer_mit-b4_8xb2-160k_ade20k-512x512.py',
         # 'segformer.b5.1024x1024.city.160k.pth': 'local_configs/segformer/segformer_mit-b5_8xb1-160k_cityscapes-1024x1024.py',
         # 'segformer.b5.640x640.ade.160k.pth': 'local_configs/segformer/segformer_mit-b5_8xb2-160k_ade20k-640x640.py',
-        # B0
-        'seg_b0_ade.pth': 'local_configs/segformer/B0/segformer.b0.512x512.ade.160k.py',
-        'seg_b0_city.pth': 'local_configs/segformer/B0/segformer.b0.1024x1024.city.160k.py',
-        # B1
-        'seg_b1_ade.pth': 'local_configs/segformer/B1/segformer.b1.512x512.ade.160k.py',
-        'seg_b1_city.pth': 'local_configs/segformer/B1/segformer.b1.1024x1024.city.160k.py',
-        # B2
-        'seg_b2_ade.pth': 'local_configs/segformer/B2/segformer.b2.512x512.ade.160k.py',
-        'seg_b2_city.pth': 'local_configs/segformer/B2/segformer.b2.1024x1024.city.160k.py',
-        # B3
-        'seg_b3_ade.pth': 'local_configs/segformer/B3/segformer.b3.512x512.ade.160k.py',
-        'seg_b3_city.pth': 'local_configs/segformer/B3/segformer.b3.1024x1024.city.160k.py',
-        # B4
-        'seg_b4_ade.pth': 'local_configs/segformer/B4/segformer.b4.512x512.ade.160k.py',
-        'seg_b4_city.pth': 'local_configs/segformer/B4/segformer.b4.1024x1024.city.160k.py',
-        # B5
-        'seg_b5_ade.pth': 'local_configs/segformer/B5/segformer.b5.512x512.ade.160k.py',
-        'seg_b5_city.pth': 'local_configs/segformer/B5/segformer.b5.1024x1024.city.160k.py'
+    # B0
+    'seg_b0_ade.pth': 'local_configs/segformer/segformer_mit-b0_8xb2-160k_ade20k-512x512.py',
+    'seg_b0_city.pth': 'local_configs/segformer/segformer_mit-b0_8xb1-160k_cityscapes-1024x1024.py',
+    # B1
+    'seg_b1_ade.pth': 'local_configs/segformer/segformer_mit-b1_8xb2-160k_ade20k-512x512.py',
+    'seg_b1_city.pth': 'local_configs/segformer/segformer_mit-b1_8xb1-160k_cityscapes-1024x1024.py',
+    # B2
+    'seg_b2_ade.pth': 'local_configs/segformer/segformer_mit-b2_8xb2-160k_ade20k-512x512.py',
+    'seg_b2_city.pth': 'local_configs/segformer/segformer_mit-b2_8xb1-160k_cityscapes-1024x1024.py',
+    # B3
+    'seg_b3_ade.pth': 'local_configs/segformer/segformer_mit-b3_8xb2-160k_ade20k-512x512.py',
+    'seg_b3_city.pth': 'local_configs/segformer/segformer_mit-b3_8xb1-160k_cityscapes-1024x1024.py',
+    # B4
+    'seg_b4_ade.pth': 'local_configs/segformer/segformer_mit-b4_8xb2-160k_ade20k-512x512.py',
+    'seg_b4_city.pth': 'local_configs/segformer/segformer_mit-b4_8xb1-160k_cityscapes-1024x1024.py',
+    # B5
+    'seg_b5_ade.pth': 'local_configs/segformer/segformer_mit-b5_8xb2-160k_ade20k-512x512.py',
+    'seg_b5_city.pth': 'local_configs/segformer/segformer_mit-b5_8xb1-160k_cityscapes-1024x1024.py'
     }
 
 def find_pth_files(root_dir='.'):
     """Find all .pth files in the root directory"""
+    # Non-recursive: only look for .pth files in the specified root_dir
     pth_pattern = os.path.join(root_dir, '*.pth')
     return glob.glob(pth_pattern)
 
@@ -88,13 +105,23 @@ def optimize_all_models():
         print(f"📦 Processing Model {i}/{len(pth_files)}: {model_name}")
         print(f"{'='*60}")
 
-        # Find corresponding config
-        if model_name not in model_config_map:
-            print(f"⚠️  No config found for {model_name}, skipping...")
+        # Find corresponding config (tolerant lookup)
+        config_path = None
+        # Exact basename match
+        if model_name in model_config_map:
+            config_path = model_config_map[model_name]
+        else:
+            # Try matching by stem (file name without extension)
+            stem = Path(model_name).stem
+            alt_key = f"{stem}.pth"
+            if alt_key in model_config_map:
+                config_path = model_config_map[alt_key]
+
+        if config_path is None:
+            print(f"⚠️  No config found for {model_name}, skipping... (check mapping)")
             failed_optimizations += 1
             continue
 
-        config_path = model_config_map[model_name]
         print(f"📋 Using config: {config_path}")
 
         # Create timestamp-based subdirectory for this model

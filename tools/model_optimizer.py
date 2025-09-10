@@ -31,11 +31,12 @@ except ImportError:
 
 
 class ModelOptimizer:
-    def __init__(self, config_path, checkpoint_path, device='cuda:0', output_dir='optimized_models'):
+    def __init__(self, config_path, checkpoint_path, device='cuda:0', output_dir='optimized_models', force_load=False):
         """Initialize the model optimizer"""
         self.config_path = Path(config_path)
         self.checkpoint_path = Path(checkpoint_path)
         self.device = device
+        self.force_load = force_load
         self.session_id = self._generate_session_id()
         
         # Load original checkpoint to preserve metadata
@@ -146,10 +147,94 @@ class ModelOptimizer:
         """Load the original model"""
         from mmseg.apis import init_model
         print("Loading original model...")
-        self.original_model = init_model(str(self.config_path), str(self.checkpoint_path), device=self.device)
-        if self.original_model is None:
-            raise ValueError("Failed to load model")
-        print("Original model loaded successfully")
+
+        # If force_load is False, use the standard init_model which may load checkpoint
+        if not self.force_load:
+            self.original_model = init_model(str(self.config_path), str(self.checkpoint_path), device=self.device)
+            if self.original_model is None:
+                raise ValueError("Failed to load model")
+            print("Original model loaded successfully (standard load)")
+            return
+
+        # Force-load path: build model first (no automatic checkpoint load), then
+        # selectively load compatible tensors from checkpoint to avoid size-mismatch crashes.
+        print("Force-loading model with non-strict weight loading (skipping mismatched shapes)")
+        # Build model on CPU to safely load weights
+        self.original_model = init_model(str(self.config_path), None, device='cpu')
+
+        # Load checkpoint state_dict
+        ckpt = torch.load(str(self.checkpoint_path), map_location='cpu')
+        sd = ckpt.get('state_dict', ckpt) if isinstance(ckpt, dict) else ckpt
+
+        # Normalize keys: remove common 'module.' prefix if present
+        def _normalize_keys(state_dict):
+            new = {}
+            for k, v in state_dict.items():
+                if k.startswith('module.'):
+                    nk = k[len('module.'):]
+                else:
+                    nk = k
+                new[nk] = v
+            return new
+
+        sd = _normalize_keys(sd)
+
+        model_state = self.original_model.state_dict()
+
+        # Build filtered state dict with matching shapes only
+        filtered = {}
+        loaded_keys = []
+        skipped_keys = []
+
+        for k, v in sd.items():
+            if k in model_state:
+                if tuple(v.shape) == tuple(model_state[k].shape):
+                    filtered[k] = v
+                    loaded_keys.append(k)
+                else:
+                    skipped_keys.append((k, tuple(v.shape), tuple(model_state[k].shape)))
+            else:
+                # key not present in model -> unexpected
+                skipped_keys.append((k, tuple(v.shape), None))
+
+        # Load filtered dict non-strictly
+        load_result = self.original_model.load_state_dict(filtered, strict=False)
+
+        # Record meta if present
+        if isinstance(ckpt, dict):
+            self.original_meta = ckpt.get('meta', {})
+
+        # Save a small report
+        report_path = self.model_dir / 'load_report.txt'
+        with open(report_path, 'w') as f:
+            f.write(f"Force-load report for {self.checkpoint_path.name}\n")
+            f.write(f"Config: {self.config_path}\n\n")
+            f.write(f"Loaded keys ({len(loaded_keys)}):\n")
+            for k in loaded_keys[:200]:
+                f.write(f"  {k}\n")
+            if len(loaded_keys) > 200:
+                f.write("  ...\n")
+            f.write("\nSkipped keys / mismatches:\n")
+            for item in skipped_keys[:200]:
+                if item[2] is None:
+                    f.write(f"  UNEXPECTED: {item[0]} -> checkpoint shape {item[1]}\n")
+                else:
+                    f.write(f"  SIZE MISMATCH: {item[0]} -> ckpt {item[1]} vs model {item[2]}\n")
+            if len(skipped_keys) > 200:
+                f.write("  ...\n")
+            f.write("\nMissing keys reported by load_state_dict():\n")
+            for k in load_result.missing_keys:
+                f.write(f"  MISSING: {k}\n")
+            f.write("\nUnexpected keys reported by load_state_dict():\n")
+            for k in load_result.unexpected_keys:
+                f.write(f"  UNEXPECTED: {k}\n")
+
+        print(f"Force-load completed. Report written to: {report_path}")
+        # Move model to desired device
+        try:
+            self.original_model.to(self.device)
+        except Exception:
+            pass
 
     def _save_checkpoint_with_meta(self, state_dict, filename):
         """Save checkpoint with preserved metadata"""

@@ -1,0 +1,24 @@
+================================================================================
+MODEL OPTIMIZATION SUMMARY
+================================================================================
+
+Date: 2025-09-10
+Config: local_configs\segformer\segformer_mit-b0_8xb2-160k_ade20k-512x512.py
+Checkpoint: seg_b0_ade.pth
+Device: cuda:0
+
+PERFORMANCE COMPARISON:
+--------------------------------------------------------------------------------
+Model           Size (MB)  Time (ms)    FPS      Speedup   
+--------------------------------------------------------------------------------
+original        14.3       89.62        11.2     1.00      x
+fp16            7.2        50.62        19.8     1.77      x
+int8            14.3       82.87        12.1     1.08      x
+batch           14.3       76.00        13.2     1.18      x
+--------------------------------------------------------------------------------
+
+GENERATED FILES:
+  - seg_b0_ade_fp16.pth
+  - seg_b0_ade_int8.pth
+
+Benchmark results saved to: optimized_models\seg_b0_ade\20250910_204734_000015\seg_b0_ade

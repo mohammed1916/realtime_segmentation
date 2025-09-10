@@ -1,0 +1,24 @@
+================================================================================
+MODEL OPTIMIZATION SUMMARY
+================================================================================
+
+Date: 2025-09-10
+Config: local_configs\segformer\segformer_mit-b3_8xb1-160k_cityscapes-1024x1024.py
+Checkpoint: seg_b3_city.pth
+Device: cuda:0
+
+PERFORMANCE COMPARISON:
+--------------------------------------------------------------------------------
+Model           Size (MB)  Time (ms)    FPS      Speedup   
+--------------------------------------------------------------------------------
+original        170.2      250.12       4.0      1.00      x
+fp16            85.1       100.99       9.9      2.48      x
+int8            170.2      176.90       5.7      1.41      x
+batch           170.2      155.51       6.4      1.61      x
+--------------------------------------------------------------------------------
+
+GENERATED FILES:
+  - seg_b3_city_fp16.pth
+  - seg_b3_city_int8.pth
+
+Benchmark results saved to: optimized_models\seg_b3_city\20250910_204843_000022\seg_b3_city
