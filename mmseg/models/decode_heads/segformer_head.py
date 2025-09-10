@@ -8,7 +8,7 @@ from mmseg.registry import MODELS
 from ..utils import resize
 
 
-@MODELS.register_module()
+@MODELS.register_module(name='SegFormerHead')
 class SegformerHead(BaseDecodeHead):
     """The all mlp Head of segformer.
 
@@ -21,6 +21,14 @@ class SegformerHead(BaseDecodeHead):
     """
 
     def __init__(self, interpolate_mode='bilinear', **kwargs):
+        # Some configs (e.g. original SegFormer configs) include 'feature_strides'
+        # which BaseDecodeHead may not accept in this local mmseg version. Remove
+        # it to avoid unexpected keyword argument errors when initializing.
+        kwargs.pop('feature_strides', None)
+        # Older configs may include nested decoder params for SegFormer (e.g.
+        # decoder_params=dict(embed_dim=256)). These are not parameters for
+        # BaseDecodeHead and should be removed before initialization.
+        kwargs.pop('decoder_params', None)
         super().__init__(input_transform='multiple_select', **kwargs)
 
         self.interpolate_mode = interpolate_mode

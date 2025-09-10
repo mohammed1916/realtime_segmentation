@@ -1,0 +1,19 @@
+================================================================================
+MODEL OPTIMIZATION SUMMARY
+================================================================================
+
+Date: 2025-09-10
+Config: local_configs\segformer\B0\segformer.b0.1024x1024.city.160k.py
+Checkpoint: seg_b0_city.pth
+Device: cuda:0
+
+PERFORMANCE COMPARISON:
+--------------------------------------------------------------------------------
+Model           Size (MB)  Time (ms)    FPS      Speedup   
+--------------------------------------------------------------------------------
+original        13.2       82.47        12.1     1.00      x
+--------------------------------------------------------------------------------
+
+GENERATED FILES:
+
+Benchmark results saved to: optimized_models\seg_b0_city\20250910_180207\seg_b0_city

@@ -42,8 +42,23 @@ class ModelOptimizer:
         self.original_checkpoint = torch.load(checkpoint_path, map_location='cpu')
         self.original_meta = self.original_checkpoint.get('meta', {})
         
-        # Create model directory
-        self.model_dir = Path(output_dir) / self.checkpoint_path.stem
+        # Create model directory.
+        # For compatibility with batch_optimize_all.py, support two invocation styles:
+        # - batch passes a directory that already contains the model base and timestamp
+        #   (e.g. optimized_models/<model_name>/<timestamp>/). In that case we append
+        #   the checkpoint stem to match existing layout: optimized_models/<model>/<ts>/<checkpoint_stem>/
+        # - standalone usage (output_dir does not include the model base): create
+        #   optimized_models/<checkpoint_stem>/<timestamp>/<checkpoint_stem>/ to match batch layout.
+        out_path = Path(output_dir)
+
+        if self.checkpoint_path.stem in out_path.parts:
+            # output_dir already contains model base (likely from batch wrapper)
+            self.model_dir = out_path / self.checkpoint_path.stem
+        else:
+            # Standalone: create timestamped subdirectory under model base
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            self.model_dir = out_path / self.checkpoint_path.stem / timestamp / self.checkpoint_path.stem
+
         self.model_dir.mkdir(parents=True, exist_ok=True)
         
         # Load model

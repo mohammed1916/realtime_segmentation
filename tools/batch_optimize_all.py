@@ -12,24 +12,49 @@ from datetime import datetime
 
 # Add the tools directory to the Python path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Also ensure repo root is on sys.path so top-level packages (e.g. mmseg) can be imported
+from pathlib import Path as _Path
+_repo_root = str(_Path(__file__).resolve().parents[1])
+if _repo_root not in sys.path:
+    sys.path.insert(0, _repo_root)
 
 from model_optimizer import ModelOptimizer
 
 def get_model_config_mapping():
     """Map model filenames to their corresponding config files"""
+    # Updated mapping: add short checkpoint names used in this repo (seg_bX_ade/city)
+    # Config paths point to the SegFormer local_configs layout; adjust if your repo differs.
     return {
-        'segformer.b0.1024x1024.city.160k.pth': 'local_configs/segformer/segformer_mit-b0_8xb1-160k_cityscapes-1024x1024.py',
-        'segformer.b0.512x1024.city.160k.pth': 'local_configs/segformer/segformer_mit-b0_8xb1-160k_cityscapes-1024x1024.py',
-        'segformer.b0.512x512.ade.160k.pth': 'local_configs/segformer/segformer_mit-b0_8xb2-160k_ade20k-512x512.py',
-        'segformer.b1.512x512.ade.160k.pth': 'local_configs/segformer/segformer_mit-b1_8xb2-160k_ade20k-512x512.py',
-        'segformer.b2.1024x1024.city.160k.pth': 'local_configs/segformer/segformer_mit-b2_8xb1-160k_cityscapes-1024x1024.py',
-        'segformer.b2.512x512.ade.160k.pth': 'local_configs/segformer/segformer_mit-b2_8xb2-160k_ade20k-512x512.py',
-        'segformer.b3.1024x1024.city.160k.pth': 'local_configs/segformer/segformer_mit-b3_8xb1-160k_cityscapes-1024x1024.py',
-        'segformer.b3.512x512.ade.160k.pth': 'local_configs/segformer/segformer_mit-b3_8xb2-160k_ade20k-512x512.py',
-        'segformer.b4.1024x1024.city.160k.pth': 'local_configs/segformer/segformer_mit-b4_8xb1-160k_cityscapes-1024x1024.py',
-        'segformer.b4.512x512.ade.160k.pth': 'local_configs/segformer/segformer_mit-b4_8xb2-160k_ade20k-512x512.py',
-        'segformer.b5.1024x1024.city.160k.pth': 'local_configs/segformer/segformer_mit-b5_8xb1-160k_cityscapes-1024x1024.py',
-        'segformer.b5.640x640.ade.160k.pth': 'local_configs/segformer/segformer_mit-b5_8xb2-160k_ade20k-640x640.py'
+        #   'segformer.b0.1024x1024.city.160k.pth': 'local_configs/segformer/segformer_mit-b0_8xb1-160k_cityscapes-1024x1024.py',
+        # 'segformer.b0.512x1024.city.160k.pth': 'local_configs/segformer/segformer_mit-b0_8xb1-160k_cityscapes-1024x1024.py',
+        # 'segformer.b0.512x512.ade.160k.pth': 'local_configs/segformer/segformer_mit-b0_8xb2-160k_ade20k-512x512.py',
+        # 'segformer.b1.512x512.ade.160k.pth': 'local_configs/segformer/segformer_mit-b1_8xb2-160k_ade20k-512x512.py',
+        # 'segformer.b2.1024x1024.city.160k.pth': 'local_configs/segformer/segformer_mit-b2_8xb1-160k_cityscapes-1024x1024.py',
+        # 'segformer.b2.512x512.ade.160k.pth': 'local_configs/segformer/segformer_mit-b2_8xb2-160k_ade20k-512x512.py',
+        # 'segformer.b3.1024x1024.city.160k.pth': 'local_configs/segformer/segformer_mit-b3_8xb1-160k_cityscapes-1024x1024.py',
+        # 'segformer.b3.512x512.ade.160k.pth': 'local_configs/segformer/segformer_mit-b3_8xb2-160k_ade20k-512x512.py',
+        # 'segformer.b4.1024x1024.city.160k.pth': 'local_configs/segformer/segformer_mit-b4_8xb1-160k_cityscapes-1024x1024.py',
+        # 'segformer.b4.512x512.ade.160k.pth': 'local_configs/segformer/segformer_mit-b4_8xb2-160k_ade20k-512x512.py',
+        # 'segformer.b5.1024x1024.city.160k.pth': 'local_configs/segformer/segformer_mit-b5_8xb1-160k_cityscapes-1024x1024.py',
+        # 'segformer.b5.640x640.ade.160k.pth': 'local_configs/segformer/segformer_mit-b5_8xb2-160k_ade20k-640x640.py',
+        # B0
+        'seg_b0_ade.pth': 'local_configs/segformer/B0/segformer.b0.512x512.ade.160k.py',
+        'seg_b0_city.pth': 'local_configs/segformer/B0/segformer.b0.1024x1024.city.160k.py',
+        # B1
+        'seg_b1_ade.pth': 'local_configs/segformer/B1/segformer.b1.512x512.ade.160k.py',
+        'seg_b1_city.pth': 'local_configs/segformer/B1/segformer.b1.1024x1024.city.160k.py',
+        # B2
+        'seg_b2_ade.pth': 'local_configs/segformer/B2/segformer.b2.512x512.ade.160k.py',
+        'seg_b2_city.pth': 'local_configs/segformer/B2/segformer.b2.1024x1024.city.160k.py',
+        # B3
+        'seg_b3_ade.pth': 'local_configs/segformer/B3/segformer.b3.512x512.ade.160k.py',
+        'seg_b3_city.pth': 'local_configs/segformer/B3/segformer.b3.1024x1024.city.160k.py',
+        # B4
+        'seg_b4_ade.pth': 'local_configs/segformer/B4/segformer.b4.512x512.ade.160k.py',
+        'seg_b4_city.pth': 'local_configs/segformer/B4/segformer.b4.1024x1024.city.160k.py',
+        # B5
+        'seg_b5_ade.pth': 'local_configs/segformer/B5/segformer.b5.512x512.ade.160k.py',
+        'seg_b5_city.pth': 'local_configs/segformer/B5/segformer.b5.1024x1024.city.160k.py'
     }
 
 def find_pth_files(root_dir='.'):
@@ -106,7 +131,20 @@ def optimize_all_models():
 
             # ONNX conversion
             print("4. Converting to ONNX...")
-            onnx_path = optimizer.convert_to_onnx()
+            # Determine input shape based on dataset (ade -> 512, city -> 1024)
+            def _input_shape_for_checkpoint(name):
+                lower = name.lower()
+                if 'ade' in lower:
+                    h = w = 512
+                elif 'city' in lower or 'cityscapes' in lower:
+                    h = w = 1024
+                else:
+                    # default to 1024
+                    h = w = 1024
+                return (1, 3, h, w)
+
+            input_shape = _input_shape_for_checkpoint(model_name)
+            onnx_path = optimizer.convert_to_onnx(input_shape=input_shape)
             if onnx_path:
                 print("5. Optimizing ONNX model...")
                 optimizer.optimize_onnx_model(onnx_path)

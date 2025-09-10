@@ -9,7 +9,7 @@ Usage:
     python cityscapes_to_video.py --input_dir /path/to/sequence --output_dir /path/to/output
     python cityscapes_to_video.py --batch --input_dir /path/to/demoVideo --output_dir /path/to/output
 
-Author: Generated for SegFormer PyTorch project
+Author: Mohammed Abdullah
 """
 
 import os

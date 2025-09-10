@@ -1,15 +1,14 @@
 _base_ = [
-    '../_base_/models/segformer_mit-b0.py',
-    '../_base_/datasets/cityscapes_1024x1024.py',
+    '../_base_/models/segformer_mit-b0.py', '../_base_/datasets/ade20k.py',
     '../_base_/default_runtime.py', '../_base_/schedules/schedule_160k.py'
 ]
-crop_size = (1024, 1024)
+crop_size = (512, 512)
 data_preprocessor = dict(size=crop_size)
 checkpoint = 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segformer/mit_b0_20220624-7e0fe6dd.pth'  # noqa
 model = dict(
     data_preprocessor=data_preprocessor,
     backbone=dict(init_cfg=dict(type='Pretrained', checkpoint=checkpoint)),
-    test_cfg=dict(mode='slide', crop_size=(1024, 1024), stride=(768, 768)))
+    decode_head=dict(num_classes=150))
 
 optim_wrapper = dict(
     _delete_=True,
@@ -35,7 +34,6 @@ param_scheduler = [
         by_epoch=False,
     )
 ]
-
-train_dataloader = dict(batch_size=1, num_workers=4)
+train_dataloader = dict(batch_size=2, num_workers=2)
 val_dataloader = dict(batch_size=1, num_workers=4)
 test_dataloader = val_dataloader
