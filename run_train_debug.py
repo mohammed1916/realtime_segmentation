@@ -1,6 +1,9 @@
 import os
 import sys
 import traceback
+
+from matplotlib.pylab import sample
+from torch import tensor
 import mmseg 
 
 sys.path.insert(0, '.')
@@ -205,8 +208,29 @@ def main(use_cuda=False, device=None):
     # Build the runner
     runner = Runner.from_cfg(cfg)
 
+    # ------------ Test GT start ---
+    from collections import Counter
+    import numpy as np
+
+    ds = runner.val_dataloader.dataset  # or runner.train_dataloader.dataset
+    sample = ds[0]
+    data_sample = sample['data_samples']       # SegDataSample
+    pixel_data = data_sample.gt_sem_seg        # PixelData
+    labels = pixel_data.data[0]                # tensor([H, W])
+    print(labels.shape)
+    import torch
+    print(torch.unique(labels))
+
+    # output:
+    # torch.Size([256, 512])
+    # tensor([  0,   1,   2,   4,   5,   7,   8,  10,  11,  13, 255])
+    # ------------ Test end ---
+
     # Attempt to load only the last checkpoint file
     _load_checkpoint_only_last(runner, cfg)
+
+
+
 
     # If user only wanted to test loading, exit early
     if os.environ.get('DEBUG_LOAD_ONLY'):
@@ -235,6 +259,15 @@ def main(use_cuda=False, device=None):
 
     print('Starting runner.train()...')
     try:
+        # # ------------ Test start ---
+        # runner.model.eval()
+        # import torch
+        # with torch.no_grad():
+        #     batch = next(iter(runner.val_dataloader))
+        #     inputs = batch['inputs'][0]
+        #     preds = runner.model(inputs).argmax(dim=1)
+        #     print("Unique predicted classes in batch:", torch.unique(preds))
+        # # ------------ Test end ---
         runner.train()
 
     except KeyboardInterrupt:
