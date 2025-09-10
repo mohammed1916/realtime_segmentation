@@ -85,7 +85,7 @@ dataset_type = 'CityscapesDataset_clips'
 data_root = 'dataset_preprocessed'
 img_dir = 'leftImg8bit_trainvaltest'
 ann_dir = 'gtFine'
-crop_size = (128, 256)
+crop_size = (128, 64)
 
 # Normalization config used by Normalize_clips below
 img_norm_cfg = dict(
@@ -125,8 +125,8 @@ data = dict(
     train=dict(
         type=dataset_type,
         data_root=data_root,
-        img_dir='leftImg8bit_trainvaltest/train',
-        ann_dir='gtFine/train',
+        img_dir='leftImg8bit_trainvaltest\\train',
+        ann_dir='gtFine\\train',
         pipeline=train_pipeline,
         dilation=[-9, -6, -3],
         istraining=True,
@@ -135,8 +135,8 @@ data = dict(
     val=dict(
         type=dataset_type,
         data_root=data_root,
-        img_dir='leftImg8bit_trainvaltest/val',
-        ann_dir='gtFine/val',
+        img_dir='leftImg8bit_trainvaltest\\val',
+        ann_dir='gtFine\\val',
         pipeline=test_pipeline,
         dilation=[-9, -6, -3],
         istraining=False,
@@ -145,8 +145,8 @@ data = dict(
     test=dict(
         type=dataset_type,
         data_root=data_root,
-        img_dir='leftImg8bit_trainvaltest/val',
-        ann_dir='gtFine/val',
+        img_dir='leftImg8bit_trainvaltest\\val',
+        ann_dir='gtFine\\val',
         pipeline=test_pipeline,
         dilation=[-9, -6, -3],
         istraining=False,
@@ -170,7 +170,14 @@ val_dataloader = dict(
     dataset=data['val']
 )
 
-test_dataloader = val_dataloader
+test_dataloader = dict(
+    batch_size=1,
+    num_workers=2,
+    persistent_workers=True,
+    sampler=dict(type='DefaultSampler', shuffle=False),
+    dataset=data['test']
+)
+
 
 # =====================
 # Training configuration (override)
@@ -178,8 +185,8 @@ test_dataloader = val_dataloader
 train_cfg = dict(
     # _delete_=True,
     type='EpochBasedTrainLoop',
-    max_epochs=16000,
-    val_interval=100,
+    max_epochs=320,
+    val_interval=1,
 )
 
 # =====================
@@ -189,16 +196,23 @@ val_evaluator = dict(
     type='IoUMetric',
     iou_metrics=['mIoU'],
     num_classes=19,
-    ignore_index=255
+    ignore_index=255,
+    prefix='val'
 )
-test_evaluator = val_evaluator
+test_evaluator = dict(
+    type='IoUMetric',
+    iou_metrics=['mIoU'],
+    num_classes=19,
+    ignore_index=255,
+    prefix='test'
+)
 
 # =====================
 # LR Scheduler (override)
 # =====================
 param_scheduler = [
     dict(type='LinearLR', start_factor=1e-6, by_epoch=False, begin=0, end=1500),
-    dict(type='PolyLR', eta_min=0.0, power=1.0, begin=1500, end=160000, by_epoch=False)
+    dict(type='PolyLR', eta_min=0.0, power=1.0, begin=1500, end=952000, by_epoch=False)
 ]
 
 # =====================
@@ -206,9 +220,9 @@ param_scheduler = [
 # =====================
 default_hooks = dict(
     timer=dict(type='IterTimerHook'),
-    logger=dict(type='LoggerHook', interval=1000),
+    logger=dict(type='LoggerHook', interval=400),
     param_scheduler=dict(type='ParamSchedulerHook'),
-    checkpoint=dict(type='CheckpointHook', interval=1600, save_best='mIoU'),
+    checkpoint=dict(type='CheckpointHook', interval=400, save_best='mIoU'),
     sampler_seed=dict(type='DistSamplerSeedHook'),
-    visualization=dict(type='SegVisualizationHook', draw=True, interval=500)
+    visualization=dict(type='SegVisualizationHook', draw=True, interval=400)
 )
