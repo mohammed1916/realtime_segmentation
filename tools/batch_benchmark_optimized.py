@@ -187,7 +187,9 @@ def benchmark_optimized_variants(output_dir, config_dir='local_configs', device=
     created from the matching config; supports ONNX via ONNX Runtime.
     """
     root = Path(output_dir)
-    benchmarks_dir = root / 'benchmarks'
+    # Store all benchmark outputs under a top-level `results/benchmarks` directory
+    result_root = Path('results')
+    benchmarks_dir = result_root / 'benchmarks'
     benchmarks_dir.mkdir(parents=True, exist_ok=True)
 
     variants = find_latest_variants(output_dir)
@@ -242,7 +244,8 @@ def benchmark_optimized_variants(output_dir, config_dir='local_configs', device=
                     print(f"Benchmarking {v} (.pth): {path}")
                     model = build_model_from_state(path, v)
                     # Create a temporary ModelOptimizer instance to reuse its benchmark helper
-                    mo = ModelOptimizer(config_path, path, device, output_dir)
+                    # Ensure ModelOptimizer saves into the top-level results directory
+                    mo = ModelOptimizer(config_path, path, device, str(result_root))
                     metrics = mo.benchmark_model(model, num_runs=num_runs)
                     metrics['model_file'] = path
                     results[v] = metrics

@@ -186,19 +186,34 @@ def main():
 
         # Optionally evaluate on dataset (single-GPU only). This is guarded so dataset is not loaded by default.
         if args.eval:
-            # Import heavy evaluation dependencies lazily and fail gracefully if unavailable
-            try:
-                import mmcv
-                import torch
-                from mmengine.model import MMDataParallel
-                from mmengine.runner import load_checkpoint
-                from mmseg.apis import single_gpu_test
-                from mmseg.datasets import build_dataset, build_dataloader
-                from mmseg.models import build_segmentor
-            except Exception as e:
-                print(f"⚠️ Required packages for evaluation are missing or failed to import: {e}")
-                print("Skipping evaluation for this run. Install mmcv/mmengine/mmseg to enable --eval.")
-                continue
+                # Import heavy evaluation dependencies lazily and fail gracefully if unavailable
+                try:
+                    import mmcv
+                    import torch
+
+                    # MMDataParallel location has moved across mmcv/mmengine versions. Try common locations
+                    MMDataParallel = None
+                    try:
+                        # preferred new location
+                        from mmengine.model import MMDataParallel as _MMDataParallel
+                        MMDataParallel = _MMDataParallel
+                    except Exception:
+                        try:
+                            # older mmcv location
+                            from mmcv.parallel import MMDataParallel as _MMDataParallel
+                            MMDataParallel = _MMDataParallel
+                        except Exception:
+                            # fallback to torch's DataParallel
+                            MMDataParallel = None
+
+                    from mmengine.runner import load_checkpoint
+                    from mmseg.apis import single_gpu_test
+                    from mmseg.datasets import build_dataset, build_dataloader
+                    from mmseg.models import build_segmentor
+                except Exception as e:
+                    print(f"⚠️ Required packages for evaluation are missing or failed to import: {e}")
+                    print("Skipping evaluation for this run. Install mmcv/mmengine/mmseg to enable --eval.")
+                    continue
 
             try:
                 print(f"\n📈 Running evaluation for {pth_file} using metrics: {args.eval_metrics}")
@@ -224,7 +239,12 @@ def main():
                     if 'PALETTE' in checkpoint['meta']:
                         model.PALETTE = checkpoint['meta']['PALETTE']
 
-                model = MMDataParallel(model.cuda(), device_ids=[0])
+                # Wrap model for single-GPU testing. Use the detected MMDataParallel if available,
+                # otherwise fall back to torch.nn.DataParallel which is widely available.
+                if MMDataParallel is not None:
+                    model = MMDataParallel(model.cuda(), device_ids=[0])
+                else:
+                    model = torch.nn.DataParallel(model.cuda(), device_ids=[0])
                 outputs = single_gpu_test(model, data_loader, show=False, show_dir=None, efficient_test=True)
 
                 # Run dataset evaluation and save results
