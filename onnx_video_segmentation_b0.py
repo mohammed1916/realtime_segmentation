@@ -249,6 +249,13 @@ def main():
                 fps_current = frame_count / elapsed
                 logger.info(f"Processed {frame_count}/{total_frames} frames ({fps_current:.1f} FPS)")
 
+                import pynvml
+
+                pynvml.nvmlInit()
+                handle = pynvml.nvmlDeviceGetHandleByIndex(0)  # GPU 0
+                mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                logger.info(f"GPU memory used: {mem_info.used / (1024*1024):.2f} MB / {mem_info.total / (1024*1024):.2f} MB")
+
             # Display frame if requested
             if args.display:
                 cv2.imshow('ONNX SegFormer B0 Segmentation', result_frame)
