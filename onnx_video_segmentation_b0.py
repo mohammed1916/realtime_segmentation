@@ -254,7 +254,7 @@ def main():
                 pynvml.nvmlInit()
                 handle = pynvml.nvmlDeviceGetHandleByIndex(0)  # GPU 0
                 mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-                logger.info(f"GPU memory used: {mem_info.used / (1024*1024):.2f} MB / {mem_info.total / (1024*1024):.2f} MB")
+                logger.info(f"GPU memory used: {mem_info.used / (1024*1024):.2f} MB / {mem_info.total / (1024*1024):.2f} MB") # type: ignore
 
             # Display frame if requested
             if args.display:
