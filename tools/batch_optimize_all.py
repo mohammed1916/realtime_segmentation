@@ -81,7 +81,7 @@ def find_pth_files(root_dir='.'):
 
 def optimize_all_models():
     """Optimize all .pth models in the root directory"""
-    print("🚀 MMSegmentation Batch Model Optimization")
+    print("MMSegmentation Batch Model Optimization")
     print("=" * 60)
 
     # Get model-config mapping
@@ -92,7 +92,7 @@ def optimize_all_models():
     print(f"Found {len(pth_files)} .pth files in root directory")
 
     if not pth_files:
-        print("❌ No .pth files found in root directory")
+        print("No .pth files found in root directory")
         return
 
     # Process each model
@@ -102,7 +102,7 @@ def optimize_all_models():
     for i, pth_file in enumerate(pth_files, 1):
         model_name = os.path.basename(pth_file)
         print(f"\n{'='*60}")
-        print(f"📦 Processing Model {i}/{len(pth_files)}: {model_name}")
+        print(f"Processing Model {i}/{len(pth_files)}: {model_name}")
         print(f"{'='*60}")
 
         # Find corresponding config (tolerant lookup)
@@ -118,19 +118,19 @@ def optimize_all_models():
                 config_path = model_config_map[alt_key]
 
         if config_path is None:
-            print(f"⚠️  No config found for {model_name}, skipping... (check mapping)")
+            print(f"No config found for {model_name}, skipping... (check mapping)")
             failed_optimizations += 1
             continue
 
-        print(f"📋 Using config: {config_path}")
+        print(f"Using config: {config_path}")
 
         # Create timestamp-based subdirectory for this model
         model_base_name = Path(pth_file).stem  # Remove .pth extension
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         unique_model_dir = f"{timestamp}_{i:06d}"  # timestamp + unique number
         output_dir = Path('optimized_models') / model_base_name / unique_model_dir
-        
-        print(f"📁 Output directory: {output_dir}")
+
+        print(f"Output directory: {output_dir}")
 
         try:
             # Initialize optimizer with unique directory
@@ -142,7 +142,7 @@ def optimize_all_models():
             )
 
             # Apply optimizations
-            print("\n🔧 Applying optimizations...")
+            print("\nApplying optimizations...")
 
             # FP16 optimization
             print("1. Converting to FP16...")
@@ -189,30 +189,30 @@ def optimize_all_models():
                     print(f"  INT8 Speedup: {int8_speedup:.1f}x")
                 print("Optimization completed successfully!")
             successful_optimizations += 1
-            print(f"✅ Successfully optimized {model_name}")
+            print(f"Successfully optimized {model_name}")
 
         except Exception as e:
-            print(f"❌ Failed to optimize {model_name}: {str(e)}")
+            print(f"Failed to optimize {model_name}: {str(e)}")
             failed_optimizations += 1
             continue
 
     # Print final summary
     print(f"\n{'='*60}")
-    print("📊 BATCH OPTIMIZATION SUMMARY")
+    print("BATCH OPTIMIZATION SUMMARY")
     print(f"{'='*60}")
     print(f"Total models processed: {len(pth_files)}")
-    print(f"✅ Successful optimizations: {successful_optimizations}")
-    print(f"❌ Failed optimizations: {failed_optimizations}")
+    print(f"Successful optimizations: {successful_optimizations}")
+    print(f"Failed optimizations: {failed_optimizations}")
 
     if successful_optimizations > 0:
-        print("📁 Optimized models saved to: optimized_models/")
-        print("📋 Each model has its own directory with timestamp-based subdirectories:")
+        print("Optimized models saved to: optimized_models/")
+        print("Each model has its own directory with timestamp-based subdirectories:")
         print("   - Format: {model_name}/{timestamp}_{number:06d}/")
         print("   - Example: segformer.b0.1024x1024.city.160k/20250829_215300_000001/")
         print("   - Contains: FP16, INT8 .pth files, ONNX models, benchmarks")
         print("   - Each subdirectory represents a unique optimization run")
 
-    print("\n🎉 Batch optimization complete!")
+    print("\n Batch optimization complete!")
 
 if __name__ == "__main__":
     optimize_all_models()
