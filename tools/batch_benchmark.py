@@ -82,6 +82,8 @@ def benchmark_single_model(checkpoint_path, config_path, device='cuda:0', output
 def create_batch_summary(all_results, output_dir):
     """Create a summary of all benchmark results"""
     benchmarks_dir = Path(output_dir) / "benchmarks"
+    # ensure output directory exists
+    benchmarks_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     # Save comprehensive results
@@ -136,6 +138,8 @@ def main():
     parser.add_argument('--output-dir', default='optimized_models', help='Output directory for results')
     parser.add_argument('--num-runs', type=int, default=5, help='Number of runs for benchmarking')
     parser.add_argument('--checkpoint', help='Specific checkpoint file to benchmark (optional)')
+    parser.add_argument('--eval', action='store_true', help='Also run dataset evaluation (mIoU/accuracy) for each checkpoint (disabled by default)')
+    parser.add_argument('--eval-metrics', nargs='+', default=['mIoU'], help='Evaluation metrics to pass to dataset.evaluate when --eval is used')
 
     args = parser.parse_args()
 
@@ -179,6 +183,62 @@ def main():
 
         if results:
             all_results[pth_file] = results
+
+        # Optionally evaluate on dataset (single-GPU only). This is guarded so dataset is not loaded by default.
+        if args.eval:
+            # Import heavy evaluation dependencies lazily and fail gracefully if unavailable
+            try:
+                import mmcv
+                import torch
+                from mmengine.model import MMDataParallel
+                from mmengine.runner import load_checkpoint
+                from mmseg.apis import single_gpu_test
+                from mmseg.datasets import build_dataset, build_dataloader
+                from mmseg.models import build_segmentor
+            except Exception as e:
+                print(f"⚠️ Required packages for evaluation are missing or failed to import: {e}")
+                print("Skipping evaluation for this run. Install mmcv/mmengine/mmseg to enable --eval.")
+                continue
+
+            try:
+                print(f"\n📈 Running evaluation for {pth_file} using metrics: {args.eval_metrics}")
+                cfg = mmcv.Config.fromfile(config_path)
+                cfg.model.pretrained = None
+                cfg.data.test.test_mode = True
+
+                dataset = build_dataset(cfg.data.test)
+                data_loader = build_dataloader(
+                    dataset,
+                    samples_per_gpu=1,
+                    workers_per_gpu=cfg.data.workers_per_gpu,
+                    dist=False,
+                    shuffle=False
+                )
+
+                cfg.model.train_cfg = None
+                model = build_segmentor(cfg.model, test_cfg=cfg.get('test_cfg'))
+                checkpoint = load_checkpoint(model, checkpoint_path, map_location='cpu')
+                if 'meta' in checkpoint and checkpoint['meta'] is not None:
+                    if 'CLASSES' in checkpoint['meta']:
+                        model.CLASSES = checkpoint['meta']['CLASSES']
+                    if 'PALETTE' in checkpoint['meta']:
+                        model.PALETTE = checkpoint['meta']['PALETTE']
+
+                model = MMDataParallel(model.cuda(), device_ids=[0])
+                outputs = single_gpu_test(model, data_loader, show=False, show_dir=None, efficient_test=True)
+
+                # Run dataset evaluation and save results
+                eval_kwargs = {}
+                results_eval = dataset.evaluate(outputs, args.eval_metrics, **eval_kwargs)
+                # Save evaluation results next to benchmark summary
+                bench_dir = Path(args.output_dir) / 'benchmarks'
+                bench_dir.mkdir(parents=True, exist_ok=True)
+                eval_file = bench_dir / f"eval_{Path(pth_file).stem}.json"
+                with open(eval_file, 'w') as f:
+                    json.dump(results_eval, f, indent=2, default=str)
+                print(f"✅ Evaluation results saved to: {eval_file}")
+            except Exception as e:
+                print(f"⚠️ Evaluation failed for {pth_file}: {e}")
 
     # Create batch summary
     if all_results:

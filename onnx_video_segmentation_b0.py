@@ -17,6 +17,8 @@ import time
 from pathlib import Path
 from typing import Optional, Tuple
 import logging
+import pynvml
+
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -169,6 +171,7 @@ class ONNXSegFormerB0:
         return overlay
 
 def main():
+    pynvml.nvmlInit()
     """Main function for ONNX video segmentation."""
     parser = argparse.ArgumentParser(description="ONNX-based real-time video segmentation with SegFormer B0")
     parser.add_argument('--video_path', required=True, help='Path to input video file')
@@ -249,9 +252,7 @@ def main():
                 fps_current = frame_count / elapsed
                 logger.info(f"Processed {frame_count}/{total_frames} frames ({fps_current:.1f} FPS)")
 
-                import pynvml
 
-                pynvml.nvmlInit()
                 handle = pynvml.nvmlDeviceGetHandleByIndex(0)  # GPU 0
                 mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
                 logger.info(f"GPU memory used: {mem_info.used / (1024*1024):.2f} MB / {mem_info.total / (1024*1024):.2f} MB") # type: ignore
