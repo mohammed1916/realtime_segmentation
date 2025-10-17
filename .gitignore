@@ -118,10 +118,8 @@ pretrained/
 dataset
 dataset_preprocessed
 # Pytorch
-*.pth
 trash/
 trash
 
 *.avi
-*.onnx
 *.png
