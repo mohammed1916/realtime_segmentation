@@ -1,24 +1,3 @@
-================================================================================
-MODEL OPTIMIZATION SUMMARY
-================================================================================
-
-Date: 2025-09-11
-Config: local_configs\segformer\segformer_mit-b5_8xb2-160k_ade20k-640x640.py
-Checkpoint: segformer.b5.640x640.ade.160k.pth
-Device: cuda:0
-
-PERFORMANCE COMPARISON:
---------------------------------------------------------------------------------
-Model           Size (MB)  Time (ms)    FPS      Speedup   
---------------------------------------------------------------------------------
-original        312.8      346.79       2.9      1.00      x
-fp16            156.4      133.65       7.5      2.59      x
-int8            312.8      255.66       3.9      1.36      x
-batch           312.8      255.23       3.9      1.36      x
---------------------------------------------------------------------------------
-
-GENERATED FILES:
-  - segformer.b5.640x640.ade.160k_fp16.pth
-  - segformer.b5.640x640.ade.160k_int8.pth
-
-Benchmark results saved to: optimized_models\segformer.b5.640x640.ade.160k\20250911_173343_000012\segformer.b5.640x640.ade.160k
+version https://git-lfs.github.com/spec/v1
+oid sha256:adf8da695d1cb1a63da9258a7ff0f41ff13865d5f444d9e9ecb020d75421cea6
+size 1174

@@ -1,24 +1,3 @@
-================================================================================
-MODEL OPTIMIZATION SUMMARY
-================================================================================
-
-Date: 2025-09-11
-Config: local_configs\segformer\segformer_mit-b0_8xb1-160k_cityscapes-1024x1024.py
-Checkpoint: segformer.b0.1024x1024.city.160k.pth
-Device: cuda:0
-
-PERFORMANCE COMPARISON:
---------------------------------------------------------------------------------
-Model           Size (MB)  Time (ms)    FPS      Speedup   
---------------------------------------------------------------------------------
-original        14.2       84.80        11.8     1.00      x
-fp16            7.1        50.09        20.0     1.69      x
-int8            14.2       84.15        11.9     1.01      x
-batch           14.2       77.11        13.0     1.10      x
---------------------------------------------------------------------------------
-
-GENERATED FILES:
-  - segformer.b0.1024x1024.city.160k_fp16.pth
-  - segformer.b0.1024x1024.city.160k_int8.pth
-
-Benchmark results saved to: optimized_models\segformer.b0.1024x1024.city.160k\20250911_172928_000001\segformer.b0.1024x1024.city.160k
+version https://git-lfs.github.com/spec/v1
+oid sha256:0d0d9d15ddf15c61383832db273a832b270c7600791ee9ebadcaaf957316c77d
+size 1195

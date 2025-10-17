@@ -177,7 +177,7 @@ def optimize_all_models():
                 optimizer.optimize_onnx_model(onnx_path)
 
             # Benchmark all versions
-            print("\n⚡ Benchmarking optimized models...")
+            print("\n Benchmarking optimized models...")
             results = optimizer.compare_optimizations(num_runs=5)
 
             # Print quick results
