@@ -4,6 +4,7 @@ import cv2
 import torch
 import numpy as np
 from mmengine.model.utils import revert_sync_batchnorm
+import os
 from mmseg.apis import init_model
 from mmseg.visualization import SegLocalVisualizer
 from mmseg.structures import SegDataSample
@@ -26,6 +27,8 @@ def main():
     parser.add_argument('--opacity', type=float, default=0.5, help='Opacity of painted map')
     parser.add_argument('--smooth-alpha', type=float, default=0.6,
                         help='Weight for previous logits in smoothing (0-1)')
+    parser.add_argument('--max-frames', type=int, default=-1,
+                        help='Stop after processing this many frames (<=0 means no limit)')
     args = parser.parse_args()
 
     assert args.show or args.output_file, 'At least one output should be enabled.'
@@ -42,10 +45,12 @@ def main():
         to_rgb=True
     )
 
-    # Initialize visualizer
+    # Initialize visualizer. Ensure a local save_dir exists to satisfy LocalVisBackend.
+    save_dir = os.path.join(os.getcwd(), 'results', 'video_logit_smoothing')
+    os.makedirs(save_dir, exist_ok=True)
     visualizer = SegLocalVisualizer(
         vis_backends=[dict(type='LocalVisBackend')],
-        save_dir=None,
+        save_dir=save_dir,
         alpha=args.opacity
     )
 
@@ -81,6 +86,10 @@ def main():
 
             frame_count += 1
             print(f"Processing frame {frame_count}...")
+
+            # stop early if requested
+            if args.max_frames > 0 and frame_count > args.max_frames:
+                break
 
             # preprocess image manually
             img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)

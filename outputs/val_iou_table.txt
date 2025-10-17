@@ -1,0 +1,587 @@
+Importing dataset module...
+Loaded cityscapes_video
+Building Runner.from_cfg...
+09/02 14:24:15 - mmengine - INFO - 
+------------------------------------------------------------
+System environment:
+    sys.platform: win32
+    Python: 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+    CUDA available: True
+    MUSA available: False
+    numpy_random_seed: 497364762
+    GPU 0: NVIDIA GeForce RTX 4060 Laptop GPU
+    CUDA_HOME: C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.9
+    NVCC: Cuda compilation tools, release 12.9, V12.9.86
+    MSVC: Microsoft (R) C/C++ Optimizing Compiler Version 19.44.35207.1 for x64
+    GCC: n/a
+    PyTorch: 2.8.0+cu128
+    PyTorch compiling details: PyTorch built with:
+  - C++ Version: 201703
+  - MSVC 193833145
+  - Intel(R) oneAPI Math Kernel Library Version 2025.2-Product Build 20250620 for Intel(R) 64 architecture applications
+  - Intel(R) MKL-DNN v3.7.1 (Git Hash 8d263e693366ef8db40acc569cc7d8edf644556d)
+  - OpenMP 2019
+  - LAPACK is enabled (usually provided by MKL)
+  - CPU capability usage: AVX512
+  - CUDA Runtime 12.8
+  - NVCC architecture flags: -gencode;arch=compute_61,code=sm_61;-gencode;arch=compute_70,code=sm_70;-gencode;arch=compute_75,code=sm_75;-gencode;arch=compute_80,code=sm_80;-gencode;arch=compute_86,code=sm_86;-gencode;arch=compute_90,code=sm_90;-gencode;arch=compute_100,code=sm_100;-gencode;arch=compute_120,code=sm_120
+  - CuDNN 91.0.2  (built against CUDA 12.9)
+  - Magma 2.5.4
+  - Build settings: BLAS_INFO=mkl, BUILD_TYPE=Release, COMMIT_SHA=a1cb3cc05d46d198467bebbb6e8fba50a325d4e7, CUDA_VERSION=12.8, CUDNN_VERSION=9.10.2, CXX_COMPILER=C:/actions-runner/_work/pytorch/pytorch/pytorch/.ci/pytorch/windows/tmp_bin/sccache-cl.exe, CXX_FLAGS=/DWIN32 /D_WINDOWS /EHsc /Zc:__cplusplus /bigobj /FS /utf-8 -DUSE_PTHREADPOOL -DNDEBUG -DUSE_KINETO -DLIBKINETO_NOROCTRACER -DLIBKINETO_NOXPUPTI=ON -DUSE_FBGEMM -DUSE_XNNPACK -DSYMBOLICATE_MOBILE_DEBUG_HANDLE /wd4624 /wd4068 /wd4067 /wd4267 /wd4661 /wd4717 /wd4244 /wd4804 /wd4273, LAPACK_INFO=mkl, PERF_WITH_AVX=1, PERF_WITH_AVX2=1, TORCH_VERSION=2.8.0, USE_CUDA=ON, USE_CUDNN=ON, USE_CUSPARSELT=OFF, USE_GFLAGS=OFF, USE_GLOG=OFF, USE_GLOO=ON, USE_MKL=ON, USE_MKLDNN=ON, USE_MPI=OFF, USE_NCCL=OFF, USE_NNPACK=OFF, USE_OPENMP=ON, USE_ROCM=OFF, USE_ROCM_KERNEL_ASSERT=OFF, USE_XCCL=OFF, USE_XPU=OFF, 
+
+    TorchVision: 0.23.0+cu128
+    OpenCV: 4.12.0
+    MMEngine: 0.10.7
+
+Runtime environment:
+    cudnn_benchmark: True
+    mp_cfg: {'mp_start_method': 'fork', 'opencv_num_threads': 0}
+    dist_cfg: {'backend': 'nccl'}
+    seed: 497364762
+    Distributed launcher: none
+    Distributed training: False
+    GPU number: 1
+------------------------------------------------------------
+
+09/02 14:24:15 - mmengine - INFO - Config:
+ann_dir = 'gtFine'
+crop_size = (
+    128,
+    256,
+)
+data = dict(
+    samples_per_gpu=1,
+    test=dict(
+        ann_dir='gtFine/val',
+        data_root='dataset_preprocessed',
+        dilation=[
+            -9,
+            -6,
+            -3,
+        ],
+        img_dir='leftImg8bit/val',
+        istraining=False,
+        mamba_mode=False,
+        pipeline=[
+            dict(type='LoadImageFromFile'),
+            dict(keep_ratio=True, scale=(
+                512,
+                256,
+            ), type='Resize'),
+            dict(type='LoadAnnotations'),
+            dict(type='PackSegInputs'),
+        ],
+        type='CityscapesDataset_clips'),
+    train=dict(
+        ann_dir='gtFine/train',
+        data_root='dataset_preprocessed',
+        dilation=[
+            -9,
+            -6,
+            -3,
+        ],
+        img_dir='leftImg8bit/train',
+        istraining=True,
+        mamba_mode=False,
+        pipeline=[
+            dict(type='LoadImageFromFile'),
+            dict(type='LoadAnnotations'),
+            dict(
+                keep_ratio=True,
+                ratio_range=(
+                    0.5,
+                    2.0,
+                ),
+                scale=(
+                    512,
+                    256,
+                ),
+                type='RandomResize'),
+            dict(
+                cat_max_ratio=0.75,
+                crop_size=(
+                    128,
+                    256,
+                ),
+                type='RandomCrop_clips'),
+            dict(prob=0.5, type='RandomFlip_clips'),
+            dict(type='PhotoMetricDistortion_clips'),
+            dict(type='PackSegInputs'),
+        ],
+        type='CityscapesDataset_clips'),
+    val=dict(
+        ann_dir='gtFine/val',
+        data_root='dataset_preprocessed',
+        dilation=[
+            -9,
+            -6,
+            -3,
+        ],
+        img_dir='leftImg8bit/val',
+        istraining=False,
+        mamba_mode=False,
+        pipeline=[
+            dict(type='LoadImageFromFile'),
+            dict(keep_ratio=True, scale=(
+                512,
+                256,
+            ), type='Resize'),
+            dict(type='LoadAnnotations'),
+            dict(type='PackSegInputs'),
+        ],
+        type='CityscapesDataset_clips'),
+    workers_per_gpu=2)
+data_preprocessor = dict(
+    bgr_to_rgb=True,
+    mean=[
+        123.675,
+        116.28,
+        103.53,
+    ],
+    pad_val=0,
+    seg_pad_val=255,
+    std=[
+        58.395,
+        57.12,
+        57.375,
+    ],
+    type='SegDataPreProcessor')
+data_root = 'dataset_preprocessed'
+dataset_type = 'CityscapesDataset_clips'
+default_hooks = dict(
+    logger=dict(interval=50, log_metric_by_epoch=False, type='LoggerHook'),
+    param_scheduler=dict(type='ParamSchedulerHook'),
+    sampler_seed=dict(type='DistSamplerSeedHook'),
+    timer=dict(type='IterTimerHook'))
+default_scope = 'mmseg'
+env_cfg = dict(
+    cudnn_benchmark=True,
+    dist_cfg=dict(backend='nccl'),
+    mp_cfg=dict(mp_start_method='fork', opencv_num_threads=0))
+img_dir = 'leftImg8bit_trainvaltest'
+img_norm_cfg = dict(
+    mean=[
+        123.675,
+        116.28,
+        103.53,
+    ],
+    std=[
+        58.395,
+        57.12,
+        57.375,
+    ],
+    to_rgb=True)
+load_from = None
+log_level = 'INFO'
+log_processor = dict(by_epoch=False)
+model = dict(
+    backbone=dict(
+        attn_drop_rate=0.0,
+        drop_path_rate=0.1,
+        drop_rate=0.0,
+        embed_dims=32,
+        in_channels=3,
+        init_cfg=None,
+        mlp_ratio=4,
+        num_heads=[
+            1,
+            2,
+            5,
+            8,
+        ],
+        num_layers=[
+            2,
+            2,
+            2,
+            2,
+        ],
+        num_stages=4,
+        out_indices=(
+            0,
+            1,
+            2,
+            3,
+        ),
+        patch_sizes=[
+            7,
+            3,
+            3,
+            3,
+        ],
+        qkv_bias=True,
+        sr_ratios=[
+            8,
+            4,
+            2,
+            1,
+        ],
+        type='MixVisionTransformer'),
+    data_preprocessor=dict(
+        bgr_to_rgb=True,
+        mean=[
+            123.675,
+            116.28,
+            103.53,
+        ],
+        pad_val=0,
+        seg_pad_val=255,
+        std=[
+            58.395,
+            57.12,
+            57.375,
+        ],
+        type='SegDataPreProcessor'),
+    decode_head=dict(
+        align_corners=False,
+        channels=256,
+        dropout_ratio=0.1,
+        feature_strides=[
+            4,
+            8,
+            16,
+            32,
+        ],
+        in_channels=[
+            32,
+            64,
+            160,
+            256,
+        ],
+        in_index=[
+            0,
+            1,
+            2,
+            3,
+        ],
+        loss_decode=dict(
+            loss_weight=1.0, type='CrossEntropyLoss', use_sigmoid=False),
+        norm_cfg=dict(requires_grad=True, type='SyncBN'),
+        num_classes=19,
+        type='TV3SHead_shift_city'),
+    pretrained=None,
+    test_cfg=dict(mode='whole'),
+    train_cfg=dict(),
+    type='EncoderDecoder_clips')
+norm_cfg = dict(requires_grad=True, type='SyncBN')
+optim_wrapper = dict(
+    clip_grad=None,
+    optimizer=dict(
+        betas=(
+            0.9,
+            0.999,
+        ),
+        lr=6e-05,
+        momentum=0.9,
+        type='AdamW',
+        weight_decay=0.01),
+    paramwise_cfg=dict(
+        custom_keys=dict(
+            head=dict(lr_mult=10.0),
+            norm=dict(decay_mult=0.0),
+            pos_block=dict(decay_mult=0.0))),
+    type='OptimWrapper')
+optimizer = dict(
+    betas=(
+        0.9,
+        0.999,
+    ),
+    lr=6e-05,
+    momentum=0.9,
+    type='AdamW',
+    weight_decay=0.01)
+param_scheduler = [
+    dict(
+        begin=0, by_epoch=False, end=1500, start_factor=1e-06,
+        type='LinearLR'),
+    dict(
+        begin=1500,
+        by_epoch=False,
+        end=160000,
+        eta_min=0.0,
+        power=1.0,
+        type='PolyLR'),
+]
+resume = False
+test_cfg = dict(type='TestLoop')
+test_dataloader = dict(
+    batch_size=1,
+    dataset=dict(
+        ann_dir='gtFine/val',
+        data_root='dataset_preprocessed',
+        dilation=[
+            -9,
+            -6,
+            -3,
+        ],
+        img_dir='leftImg8bit/val',
+        istraining=False,
+        mamba_mode=False,
+        pipeline=[
+            dict(type='LoadImageFromFile'),
+            dict(keep_ratio=True, scale=(
+                512,
+                256,
+            ), type='Resize'),
+            dict(type='LoadAnnotations'),
+            dict(type='PackSegInputs'),
+        ],
+        type='CityscapesDataset_clips'),
+    num_workers=2,
+    persistent_workers=True,
+    sampler=dict(shuffle=False, type='DefaultSampler'))
+test_evaluator = dict(
+    iou_metrics=[
+        'mIoU',
+    ], type='IoUMetric')
+test_pipeline = [
+    dict(type='LoadImageFromFile'),
+    dict(keep_ratio=True, scale=(
+        512,
+        256,
+    ), type='Resize'),
+    dict(type='LoadAnnotations'),
+    dict(type='PackSegInputs'),
+]
+train_cfg = dict(
+    max_epochs=160,
+    max_iters=160000,
+    type='EpochBasedTrainLoop',
+    val_interval=10)
+train_dataloader = dict(
+    batch_size=1,
+    dataset=dict(
+        ann_dir='gtFine/train',
+        data_root='dataset_preprocessed',
+        dilation=[
+            -9,
+            -6,
+            -3,
+        ],
+        img_dir='leftImg8bit/train',
+        istraining=True,
+        mamba_mode=False,
+        pipeline=[
+            dict(type='LoadImageFromFile'),
+            dict(type='LoadAnnotations'),
+            dict(
+                keep_ratio=True,
+                ratio_range=(
+                    0.5,
+                    2.0,
+                ),
+                scale=(
+                    512,
+                    256,
+                ),
+                type='RandomResize'),
+            dict(
+                cat_max_ratio=0.75,
+                crop_size=(
+                    128,
+                    256,
+                ),
+                type='RandomCrop_clips'),
+            dict(prob=0.5, type='RandomFlip_clips'),
+            dict(type='PhotoMetricDistortion_clips'),
+            dict(type='PackSegInputs'),
+        ],
+        type='CityscapesDataset_clips'),
+    num_workers=2,
+    persistent_workers=True,
+    sampler=dict(shuffle=True, type='DefaultSampler'))
+train_pipeline = [
+    dict(type='LoadImageFromFile'),
+    dict(type='LoadAnnotations'),
+    dict(
+        keep_ratio=True,
+        ratio_range=(
+            0.5,
+            2.0,
+        ),
+        scale=(
+            512,
+            256,
+        ),
+        type='RandomResize'),
+    dict(cat_max_ratio=0.75, crop_size=(
+        128,
+        256,
+    ), type='RandomCrop_clips'),
+    dict(prob=0.5, type='RandomFlip_clips'),
+    dict(type='PhotoMetricDistortion_clips'),
+    dict(type='PackSegInputs'),
+]
+tta_model = dict(type='SegTTAModel')
+val_cfg = dict(type='ValLoop')
+val_dataloader = dict(
+    batch_size=1,
+    dataset=dict(
+        ann_dir='gtFine/val',
+        data_root='dataset_preprocessed',
+        dilation=[
+            -9,
+            -6,
+            -3,
+        ],
+        img_dir='leftImg8bit/val',
+        istraining=False,
+        mamba_mode=False,
+        pipeline=[
+            dict(type='LoadImageFromFile'),
+            dict(keep_ratio=True, scale=(
+                512,
+                256,
+            ), type='Resize'),
+            dict(type='LoadAnnotations'),
+            dict(type='PackSegInputs'),
+        ],
+        type='CityscapesDataset_clips'),
+    num_workers=0,
+    persistent_workers=False,
+    sampler=dict(shuffle=False, type='DefaultSampler'))
+val_evaluator = dict(
+    iou_metrics=[
+        'mIoU',
+    ], type='IoUMetric')
+vis_backends = [
+    dict(type='LocalVisBackend'),
+]
+visualizer = dict(
+    name='visualizer',
+    type='SegLocalVisualizer',
+    vis_backends=[
+        dict(type='LocalVisBackend'),
+    ])
+work_dir = 'work_dirs/segformer_cityscapes_video_debug_val'
+
+C:\Users\abd\d\ai\seg\segformer_pytorch\mmseg\models\losses\cross_entropy_loss.py:250: UserWarning: Default ``avg_non_ignore`` is False, if you would like to ignore the certain label and average loss over non-ignore labels, which is the same with PyTorch official cross_entropy, set ``avg_non_ignore=True``.
+  warnings.warn(
+09/02 14:24:16 - mmengine - WARNING - init_weights of TV3SHead_shift_city has been called more than once.
+09/02 14:24:16 - mmengine - INFO - Distributed training is not used, all SyncBatchNorm (SyncBN) layers in the model will be automatically reverted to BatchNormXd layers if they are used.
+09/02 14:24:16 - mmengine - INFO - Hooks will be executed in the following order:
+before_run:
+(VERY_HIGH   ) RuntimeInfoHook                    
+(BELOW_NORMAL) LoggerHook                         
+ -------------------- 
+before_train:
+(VERY_HIGH   ) RuntimeInfoHook                    
+(NORMAL      ) IterTimerHook                      
+(VERY_LOW    ) CheckpointHook                     
+ -------------------- 
+before_train_epoch:
+(VERY_HIGH   ) RuntimeInfoHook                    
+(NORMAL      ) IterTimerHook                      
+(NORMAL      ) DistSamplerSeedHook                
+ -------------------- 
+before_train_iter:
+(VERY_HIGH   ) RuntimeInfoHook                    
+(NORMAL      ) IterTimerHook                      
+ -------------------- 
+after_train_iter:
+(VERY_HIGH   ) RuntimeInfoHook                    
+(NORMAL      ) IterTimerHook                      
+(BELOW_NORMAL) LoggerHook                         
+(LOW         ) ParamSchedulerHook                 
+(VERY_LOW    ) CheckpointHook                     
+ -------------------- 
+after_train_epoch:
+(NORMAL      ) IterTimerHook                      
+(LOW         ) ParamSchedulerHook                 
+(VERY_LOW    ) CheckpointHook                     
+ -------------------- 
+before_val:
+(VERY_HIGH   ) RuntimeInfoHook                    
+ -------------------- 
+before_val_epoch:
+(NORMAL      ) IterTimerHook                      
+ -------------------- 
+before_val_iter:
+(NORMAL      ) IterTimerHook                      
+ -------------------- 
+after_val_iter:
+(NORMAL      ) IterTimerHook                      
+(BELOW_NORMAL) LoggerHook                         
+ -------------------- 
+after_val_epoch:
+(VERY_HIGH   ) RuntimeInfoHook                    
+(NORMAL      ) IterTimerHook                      
+(BELOW_NORMAL) LoggerHook                         
+(LOW         ) ParamSchedulerHook                 
+(VERY_LOW    ) CheckpointHook                     
+ -------------------- 
+after_val:
+(VERY_HIGH   ) RuntimeInfoHook                    
+ -------------------- 
+after_train:
+(VERY_HIGH   ) RuntimeInfoHook                    
+(VERY_LOW    ) CheckpointHook                     
+ -------------------- 
+before_test:
+(VERY_HIGH   ) RuntimeInfoHook                    
+ -------------------- 
+before_test_epoch:
+(NORMAL      ) IterTimerHook                      
+ -------------------- 
+before_test_iter:
+(NORMAL      ) IterTimerHook                      
+ -------------------- 
+after_test_iter:
+(NORMAL      ) IterTimerHook                      
+(BELOW_NORMAL) LoggerHook                         
+ -------------------- 
+after_test_epoch:
+(VERY_HIGH   ) RuntimeInfoHook                    
+(NORMAL      ) IterTimerHook                      
+(BELOW_NORMAL) LoggerHook                         
+ -------------------- 
+after_test:
+(VERY_HIGH   ) RuntimeInfoHook                    
+ -------------------- 
+after_run:
+(BELOW_NORMAL) LoggerHook                         
+ -------------------- 
+Runner built; moving model to cpu
+Running val loop (this will print model diagnostics once)...
+500
+flip video:  False
+09/02 14:24:16 - mmengine - WARNING - The prefix is not set in metric class IoUMetric.
+09/02 14:24:16 - mmengine - WARNING - Dataset CityscapesDataset_clips has no metainfo. ``dataset_meta`` in evaluator, metric and visualizer will be None.
+IoUMetric: populated dataset_meta from CityscapesDataset_clips.CLASSES
+IoUMetric DEBUG: data_batch keys=['img_info', 'ann_info', 'seg_fields', 'img_prefix', 'seg_prefix', 'filename', 'ori_filename', 'img', 'img_shape', 'ori_shape', 'pad_shape', 'scale_factor', 'img_norm_cfg', 'gt_semantic_seg', 'inputs', 'data_samples']
+09/02 14:24:20 - mmengine - INFO - Iter(val) [ 50/500]    eta: 0:00:38  time: 0.0887  data_time: 0.0079  memory: 14  
+09/02 14:24:25 - mmengine - INFO - Iter(val) [100/500]    eta: 0:00:35  time: 0.1012  data_time: 0.0088  memory: 0  
+09/02 14:24:29 - mmengine - INFO - Iter(val) [150/500]    eta: 0:00:31  time: 0.0915  data_time: 0.0080  memory: 0  
+09/02 14:24:34 - mmengine - INFO - Iter(val) [200/500]    eta: 0:00:27  time: 0.0890  data_time: 0.0077  memory: 0  
+09/02 14:24:38 - mmengine - INFO - Iter(val) [250/500]    eta: 0:00:22  time: 0.0836  data_time: 0.0076  memory: 0  
+09/02 14:24:43 - mmengine - INFO - Iter(val) [300/500]    eta: 0:00:17  time: 0.0826  data_time: 0.0073  memory: 0  
+09/02 14:24:47 - mmengine - INFO - Iter(val) [350/500]    eta: 0:00:13  time: 0.0829  data_time: 0.0073  memory: 0  
+09/02 14:24:51 - mmengine - INFO - Iter(val) [400/500]    eta: 0:00:08  time: 0.0952  data_time: 0.0089  memory: 0  
+09/02 14:24:56 - mmengine - INFO - Iter(val) [450/500]    eta: 0:00:04  time: 0.0912  data_time: 0.0084  memory: 0  
+09/02 14:25:00 - mmengine - INFO - Iter(val) [500/500]    eta: 0:00:00  time: 0.0860  data_time: 0.0083  memory: 0  
+IoUMetric DEBUG: gt present class indices=[np.int64(0), np.int64(1), np.int64(2), np.int64(3), np.int64(4), np.int64(5), np.int64(6), np.int64(7), np.int64(8), np.int64(9), np.int64(10), np.int64(11), np.int64(12), np.int64(13), np.int64(14), np.int64(15), np.int64(16), np.int64(17), np.int64(18)]
+09/02 14:25:00 - mmengine - INFO - per class results:
+09/02 14:25:00 - mmengine - INFO - 
++---------------+-------+--------+
+|     Class     |  IoU  |  Acc   |
++---------------+-------+--------+
+|      road     | 37.63 | 100.00 |
+|    sidewalk   |  0.00 |  0.00  |
+|    building   |  0.00 |  0.00  |
+|      wall     |  0.00 |  0.00  |
+|     fence     |  0.00 |  0.00  |
+|      pole     |  0.00 |  0.00  |
+| traffic light |  0.00 |  0.00  |
+|  traffic sign |  0.00 |  0.00  |
+|   vegetation  |  0.00 |  0.00  |
+|    terrain    |  0.00 |  0.00  |
+|      sky      |  0.00 |  0.00  |
+|     person    |  0.00 |  0.00  |
+|     rider     |  0.00 |  0.00  |
+|      car      |  0.00 |  0.00  |
+|     truck     |  0.00 |  0.00  |
+|      bus      |  0.00 |  0.00  |
+|     train     |  0.00 |  0.00  |
+|   motorcycle  |  0.00 |  0.00  |
+|    bicycle    |  0.00 |  0.00  |
++---------------+-------+--------+
+09/02 14:25:00 - mmengine - INFO - Iter(val) [500/500]    aAcc: 37.6300  mIoU: 1.9800  mAcc: 5.2600  data_time: 0.0080  time: 0.0887

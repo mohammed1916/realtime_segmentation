@@ -21,6 +21,43 @@ def setup_environment():
     # Import and register TV3S components
     from mmseg.models.decode_heads.tv3s_head import TV3SHead_shift_city
     from mmseg.models.segmentors.encoder_decoder_clips import EncoderDecoder_clips
+    # Import dataset module to register CityscapesDataset_clips
+    try:
+        import mmseg.datasets.cityscapes_video as _city_ds  # registers dataset classes
+        print("✓ Cityscapes video dataset module imported and registered")
+    except Exception:
+        # not fatal here; the dataset may register elsewhere
+        print("⚠ Could not import mmseg.datasets.cityscapes_video; dataset may not be registered yet")
+
+    # Ensure CityscapesDataset_clips is actually registered in the mmseg registry
+    try:
+        from mmseg.registry import DATASETS as MMSEG_DATASETS
+        try:
+            # try to resolve the dataset by name
+            MMSEG_DATASETS.get('CityscapesDataset_clips')
+            print("✓ CityscapesDataset_clips already present in mmseg registry")
+        except Exception:
+            # import the class and register it explicitly
+            try:
+                from mmseg.datasets.cityscapes_video import CityscapesDataset_clips
+                MMSEG_DATASETS.register_module(module=CityscapesDataset_clips)
+                print("✓ Registered CityscapesDataset_clips into mmseg registry")
+            except Exception as _e:
+                print(f"⚠ Could not import/register CityscapesDataset_clips: {_e}")
+    except Exception:
+        # If registry import fails, skip explicit registration
+        print("⚠ Could not access mmseg registry to verify dataset registration")
+    # Import tv3s_utils transforms so custom pipeline transforms (RandomCrop_clips, etc.)
+    # are registered into mmseg's TRANSFORMS/PIPELINES before building datasets.
+    try:
+        import tv3s_utils.utils.datasets.transforms as _tv3s_transforms
+        print('✓ Imported tv3s_utils transforms to register custom pipelines')
+    except Exception:
+        try:
+            import tv3s_utils.datasets.transforms as _tv3s_transforms
+            print('✓ Imported tv3s_utils.datasets.transforms (alternate path)')
+        except Exception as _e:
+            print(f"⚠ Could not import tv3s custom transforms: {_e}")
 
     print("✓ TV3S components imported successfully")
     return True
@@ -84,22 +121,29 @@ def main():
 
     # Create runner
     try:
+        # Remove unsupported keys for EpochBasedTrainLoop in this environment
+        try:
+            train_cfg = cfg.get('train_cfg', None)
+            if train_cfg is not None:
+                # handle both dict-like Config and plain dict
+                loop_type = train_cfg.get('type', '') if hasattr(train_cfg, 'get') else getattr(train_cfg, 'type', '')
+                if loop_type == 'EpochBasedTrainLoop' and 'max_iters' in train_cfg:
+                    try:
+                        del train_cfg['max_iters']
+                    except Exception:
+                        # fallback for attribute-style
+                        if hasattr(train_cfg, 'max_iters'):
+                            delattr(train_cfg, 'max_iters')
+                    print("⚑ Removed unsupported 'max_iters' from train_cfg for EpochBasedTrainLoop")
+        except Exception as _e:
+            print(f"⚠ Could not sanitize train_cfg: {_e}")
+
         runner = Runner.from_cfg(cfg)
         print("✓ Runner created successfully")
+        runner.train()
     except Exception as e:
         print(f"✗ Failed to create runner: {e}")
         return
-
-    # Start training
-    print("Starting training...")
-    try:
-        runner.train()
-        print("✓ Training completed successfully!")
-    except KeyboardInterrupt:
-        print("\n⚠ Training interrupted by user")
-    except Exception as e:
-        print(f"✗ Training failed: {e}")
-        raise
 
 if __name__ == '__main__':
     main()

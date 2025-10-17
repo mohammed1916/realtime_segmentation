@@ -3,7 +3,10 @@ import warnings
 from pathlib import Path
 from typing import Dict, Optional, Union
 
+import torch
+from mmcv.transforms import to_tensor
 import mmcv
+import os
 import mmengine.fileio as fileio
 import numpy as np
 from mmcv.transforms import BaseTransform
@@ -18,6 +21,55 @@ try:
 except ImportError:
     gdal = None
 
+@TRANSFORMS.register_module()
+class DefaultFormatBundle_clips(object):
+    """Default formatting bundle.
+
+    It simplifies the pipeline of formatting common fields, including "img"
+    and "gt_semantic_seg". These fields are formatted as follows.
+
+    - img: (1)transpose, (2)to tensor, (3)to DataContainer (stack=True)
+    - gt_semantic_seg: (1)unsqueeze dim-0 (2)to tensor,
+                       (3)to DataContainer (stack=True)
+    """
+
+    def __call__(self, results):
+        """Call function to transform and format common fields in results.
+
+        Args:
+            results (dict): Result dict contains the data to convert.
+
+        Returns:
+            dict: The result dict contains the data that is formatted with
+                default bundle.
+        """
+
+        if 'img' in results:
+            assert isinstance(results['img'], list)
+            img_all=[]
+            for im in results['img']:
+                # img = results['img']
+                if len(im.shape) < 3:
+                    im = np.expand_dims(im, -1)
+                img = np.ascontiguousarray(im.transpose(2, 0, 1))
+                img_all.append(to_tensor(img))
+            img_all=torch.stack(img_all)
+            results['img'] = DC(img_all, stack=True)
+        if 'gt_semantic_seg' in results:
+            # convert to long
+            gt_seg_all=[]
+            assert isinstance(results['gt_semantic_seg'], list)
+            for gt in results['gt_semantic_seg']:
+                gt_one= to_tensor(gt[None,
+                                                         ...].astype(np.int64))
+                    
+                gt_seg_all.append(gt_one)
+            gt_seg_all=torch.stack(gt_seg_all)
+            results['gt_semantic_seg']=DC(gt_seg_all, stack=True)
+        return results
+
+    def __repr__(self):
+        return self.__class__.__name__
 
 @TRANSFORMS.register_module()
 class LoadAnnotations(MMCV_LoadAnnotations):
@@ -96,25 +148,71 @@ class LoadAnnotations(MMCV_LoadAnnotations):
         Returns:
             dict: The dict contains loaded semantic segmentation annotations.
         """
+        # Determine seg_map source robustly. Support several key layouts:
+        #  - results['seg_map_path'] (absolute or relative path)
+        #  - results['ann_info']['seg_map'] or results['img_info']['ann']['seg_map']
+        #  - results['ann']['seg_map']
+        seg_map_entry = None
+        if 'seg_map_path' in results:
+            seg_map_entry = results['seg_map_path']
+        else:
+            # try ann_info then img_info nested fields
+            ann_info = results.get('ann_info') or {}
+            if isinstance(ann_info, dict) and 'seg_map' in ann_info:
+                seg_map_entry = ann_info.get('seg_map')
+            else:
+                img_info = results.get('img_info') or {}
+                if isinstance(img_info, dict):
+                    ann = img_info.get('ann') or {}
+                    if isinstance(ann, dict) and 'seg_map' in ann:
+                        seg_map_entry = ann.get('seg_map')
+                # final fallback to direct 'ann' key
+                if seg_map_entry is None and isinstance(results.get('ann'), dict) and 'seg_map' in results.get('ann'):
+                    seg_map_entry = results.get('ann').get('seg_map')
 
-        img_bytes = fileio.get(
-            results['seg_map_path'], backend_args=self.backend_args)
-        gt_semantic_seg = mmcv.imfrombytes(
-            img_bytes, flag='unchanged',
-            backend=self.imdecode_backend).squeeze().astype(np.uint8)
+        if seg_map_entry is None:
+            raise KeyError('seg_map_path not found in results; tried seg_map_path, ann_info, img_info.')
+
+        def _resolve_path(p):
+            # If already absolute, return as-is; else join with seg_prefix if present
+            if isinstance(p, str) and os.path.isabs(p):
+                return p
+            seg_prefix = results.get('seg_prefix') or ''
+            return os.path.join(seg_prefix, p) if seg_prefix else p
+
+        # Support list of seg map paths (clips) or single path
+        if isinstance(seg_map_entry, (list, tuple)):
+            gt_list = []
+            for one in seg_map_entry:
+                path = _resolve_path(one)
+                img_bytes = fileio.get(path, backend_args=self.backend_args)
+                seg = mmcv.imfrombytes(img_bytes, flag='unchanged', backend=self.imdecode_backend).squeeze().astype(np.uint8)
+                gt_list.append(seg)
+            gt_semantic_seg = gt_list
+        else:
+            path = _resolve_path(seg_map_entry)
+            img_bytes = fileio.get(path, backend_args=self.backend_args)
+            gt_semantic_seg = mmcv.imfrombytes(img_bytes, flag='unchanged', backend=self.imdecode_backend).squeeze().astype(np.uint8)
 
         # reduce zero_label
         if self.reduce_zero_label is None:
-            self.reduce_zero_label = results['reduce_zero_label']
-        assert self.reduce_zero_label == results['reduce_zero_label'], \
-            'Initialize dataset with `reduce_zero_label` as ' \
-            f'{results["reduce_zero_label"]} but when load annotation ' \
-            f'the `reduce_zero_label` is {self.reduce_zero_label}'
+            # Fall back to results-provided value if present; default to False
+            self.reduce_zero_label = results.get('reduce_zero_label', False)
         if self.reduce_zero_label:
-            # avoid using underflow conversion
-            gt_semantic_seg[gt_semantic_seg == 0] = 255
-            gt_semantic_seg = gt_semantic_seg - 1
-            gt_semantic_seg[gt_semantic_seg == 254] = 255
+            # apply reduction per-frame if list
+            if isinstance(gt_semantic_seg, list):
+                new_list = []
+                for g in gt_semantic_seg:
+                    g[g == 0] = 255
+                    g = g - 1
+                    g[g == 254] = 255
+                    new_list.append(g)
+                gt_semantic_seg = new_list
+            else:
+                # avoid using underflow conversion
+                gt_semantic_seg[gt_semantic_seg == 0] = 255
+                gt_semantic_seg = gt_semantic_seg - 1
+                gt_semantic_seg[gt_semantic_seg == 254] = 255
         # modify if custom classes
         if results.get('label_map', None) is not None:
             # Add deep copy to solve bug of repeatedly
@@ -124,6 +222,9 @@ class LoadAnnotations(MMCV_LoadAnnotations):
             for old_id, new_id in results['label_map'].items():
                 gt_semantic_seg[gt_semantic_seg_copy == old_id] = new_id
         results['gt_seg_map'] = gt_semantic_seg
+        # Ensure seg_fields exists and append
+        if 'seg_fields' not in results or results['seg_fields'] is None:
+            results['seg_fields'] = []
         results['seg_fields'].append('gt_seg_map')
 
     def __repr__(self) -> str:

@@ -2,6 +2,7 @@
 import warnings
 
 import numpy as np
+import torch
 from mmcv.transforms import to_tensor
 from mmcv.transforms.base import BaseTransform
 from mmengine.structures import PixelData
@@ -12,34 +13,7 @@ from mmseg.structures import SegDataSample
 
 @TRANSFORMS.register_module()
 class PackSegInputs(BaseTransform):
-    """Pack the inputs data for the semantic segmentation.
-
-    The ``img_meta`` item is always populated.  The contents of the
-    ``img_meta`` dictionary depends on ``meta_keys``. By default this includes:
-
-        - ``img_path``: filename of the image
-
-        - ``ori_shape``: original shape of the image as a tuple (h, w, c)
-
-        - ``img_shape``: shape of the image input to the network as a tuple \
-            (h, w, c).  Note that images may be zero padded on the \
-            bottom/right if the batch tensor is larger than this shape.
-
-        - ``pad_shape``: shape of padded images
-
-        - ``scale_factor``: a float indicating the preprocessing scale
-
-        - ``flip``: a boolean indicating if image flip transform was used
-
-        - ``flip_direction``: the flipping direction
-
-    Args:
-        meta_keys (Sequence[str], optional): Meta keys to be packed from
-            ``SegDataSample`` and collected in ``data[img_metas]``.
-            Default: ``('img_path', 'ori_shape',
-            'img_shape', 'pad_shape', 'scale_factor', 'flip',
-            'flip_direction')``
-    """
+    """Pack the inputs data for clip-based segmentation."""
 
     def __init__(self,
                  meta_keys=('img_path', 'seg_map_path', 'ori_shape',
@@ -48,65 +22,72 @@ class PackSegInputs(BaseTransform):
         self.meta_keys = meta_keys
 
     def transform(self, results: dict) -> dict:
-        """Method to pack the input data.
+        # Alias gt_semantic_seg → gt_seg_map for consistency
+        if 'gt_semantic_seg' in results and 'gt_seg_map' not in results:
+            results['gt_seg_map'] = results['gt_semantic_seg']
 
-        Args:
-            results (dict): Result dict from the data pipeline.
-
-        Returns:
-            dict:
-
-            - 'inputs' (obj:`torch.Tensor`): The forward data of models.
-            - 'data_sample' (obj:`SegDataSample`): The annotation info of the
-                sample.
-        """
         packed_results = dict()
+
+        # Handle list of frames
         if 'img' in results:
-            img = results['img']
-            if len(img.shape) < 3:
-                img = np.expand_dims(img, -1)
-            if not img.flags.c_contiguous:
-                img = to_tensor(np.ascontiguousarray(img.transpose(2, 0, 1)))
-            else:
-                img = img.transpose(2, 0, 1)
-                img = to_tensor(img).contiguous()
-            packed_results['inputs'] = img
+            imgs = results['img']
+            if isinstance(imgs, list):
+                tensor_list = []
+                for img in imgs:
+                    # Support numpy arrays (H, W, C) and torch tensors
+                    if isinstance(img, np.ndarray):
+                        if len(img.shape) < 3:
+                            img = np.expand_dims(img, -1)
+                        img = img.transpose(2, 0, 1)  # HWC → CHW
+                        tensor_list.append(to_tensor(img).contiguous())
+                    elif torch.is_tensor(img):
+                        # If already CHW, keep as-is; otherwise permute HWC -> CHW
+                        if img.dim() == 3 and img.shape[0] in (1, 3):
+                            tensor_list.append(img.contiguous())
+                        elif img.dim() == 3:
+                            tensor_list.append(img.permute(2, 0, 1).contiguous())
+                        else:
+                            # fallback: convert to numpy then to tensor
+                            _img = img.numpy()
+                            if _img.ndim < 3:
+                                _img = np.expand_dims(_img, -1)
+                            _img = _img.transpose(2, 0, 1)
+                            tensor_list.append(to_tensor(_img).contiguous())
 
+                # Take the last frame to make it 3D
+                img_tensor = tensor_list[-1]  # shape: (C, H, W)
+                packed_results['inputs'] = img_tensor
+            else:
+                img = imgs
+                if isinstance(img, np.ndarray):
+                    if len(img.shape) < 3:
+                        img = np.expand_dims(img, -1)
+                    img = img.transpose(2, 0, 1)
+                    packed_results['inputs'] = to_tensor(img).contiguous()
+                elif torch.is_tensor(img):
+                    if img.dim() == 3 and img.shape[0] in (1, 3):
+                        packed_results['inputs'] = img.contiguous()
+                    elif img.dim() == 3:
+                        packed_results['inputs'] = img.permute(2, 0, 1).contiguous()
+                    else:
+                        _img = img.numpy()
+                        if _img.ndim < 3:
+                            _img = np.expand_dims(_img, -1)
+                        _img = _img.transpose(2, 0, 1)
+                        packed_results['inputs'] = to_tensor(_img).contiguous()
+
+        # Build data sample
         data_sample = SegDataSample()
-        if 'gt_seg_map' in results:
-            if len(results['gt_seg_map'].shape) == 2:
-                data = to_tensor(results['gt_seg_map'][None,
-                                                       ...].astype(np.int64))
-            else:
-                warnings.warn('Please pay attention your ground truth '
-                              'segmentation map, usually the segmentation '
-                              'map is 2D, but got '
-                              f'{results["gt_seg_map"].shape}')
-                data = to_tensor(results['gt_seg_map'].astype(np.int64))
-            gt_sem_seg_data = dict(data=data)
-            data_sample.gt_sem_seg = PixelData(**gt_sem_seg_data)
+        gt_map = results.get('gt_seg_map', None)
+        if gt_map is not None:
+            if isinstance(gt_map, list):  # clip-style masks
+                gt_map = gt_map[-1]       # usually take last frame’s label
+            data = to_tensor(gt_map[None, ...].astype(np.int64))
+            data_sample.gt_sem_seg = PixelData(data=data)
 
-        if 'gt_edge_map' in results:
-            gt_edge_data = dict(
-                data=to_tensor(results['gt_edge_map'][None,
-                                                      ...].astype(np.int64)))
-            data_sample.set_data(dict(gt_edge_map=PixelData(**gt_edge_data)))
-
-        if 'gt_depth_map' in results:
-            gt_depth_data = dict(
-                data=to_tensor(results['gt_depth_map'][None, ...]))
-            data_sample.set_data(dict(gt_depth_map=PixelData(**gt_depth_data)))
-
-        img_meta = {}
-        for key in self.meta_keys:
-            if key in results:
-                img_meta[key] = results[key]
+        # Meta info
+        img_meta = {k: results[k] for k in self.meta_keys if k in results}
         data_sample.set_metainfo(img_meta)
         packed_results['data_samples'] = data_sample
 
         return packed_results
-
-    def __repr__(self) -> str:
-        repr_str = self.__class__.__name__
-        repr_str += f'(meta_keys={self.meta_keys})'
-        return repr_str

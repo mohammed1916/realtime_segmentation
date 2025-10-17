@@ -81,10 +81,50 @@ class SegVisualizationHook(Hook):
         # is visualized for each evaluation.
         total_curr_iter = runner.iter + batch_idx
 
-        # Visualize only the first data
-        img_path = outputs[0].img_path
-        img_bytes = get(img_path, backend_args=self.backend_args)
-        img = mmcv.imfrombytes(img_bytes, channel_order='rgb')
+        # Try to find an image path from the data sample metainfo or the
+        # raw data_batch. Be defensive: some custom datasets (e.g.
+        # CityscapesDataset_clips) do not expose `SegDataSample.img_path`.
+        def _resolve_img_path(data_sample, data_batch):
+            # prefer explicit attribute if present
+            img_path = getattr(data_sample, 'img_path', None)
+            if img_path:
+                return img_path
+            # then try metainfo dict
+            metainfo = getattr(data_sample, 'metainfo', None)
+            if isinstance(metainfo, dict):
+                img_path = metainfo.get('img_path') or metainfo.get('filename')
+                if img_path:
+                    return img_path
+            # finally try the dataloader batch (may contain lists)
+            if isinstance(data_batch, dict):
+                if 'img_path' in data_batch:
+                    v = data_batch['img_path']
+                    if isinstance(v, (list, tuple)):
+                        return v[0]
+                    return v
+                if 'img_metas' in data_batch:
+                    try:
+                        im = data_batch['img_metas']
+                        if isinstance(im, (list, tuple)) and len(im) > 0:
+                            im0 = im[0]
+                            if isinstance(im0, dict):
+                                return im0.get('img_path') or im0.get('filename')
+                    except Exception:
+                        pass
+            return None
+
+        img_path = _resolve_img_path(outputs[0], data_batch)
+        if img_path is None:
+            # Nothing we can visualize for this sample; skip safely.
+            return
+
+        try:
+            img_bytes = get(img_path, backend_args=self.backend_args)
+            img = mmcv.imfrombytes(img_bytes, channel_order='rgb')
+        except Exception:
+            # If loading fails, skip visualization rather than crashing.
+            return
+
         window_name = f'val_{osp.basename(img_path)}'
 
         if total_curr_iter % self.interval == 0:
@@ -110,15 +150,47 @@ class SegVisualizationHook(Hook):
         if self.draw is False:
             return
 
-        for data_sample in outputs:
+        for i, data_sample in enumerate(outputs):
             self._test_index += 1
 
-            img_path = data_sample.img_path
-            window_name = f'test_{osp.basename(img_path)}'
+            # resolve image path with the same fallback used in val
+            def _resolve_img_path_for_test(data_sample, data_batch, idx):
+                img_path = getattr(data_sample, 'img_path', None)
+                if img_path:
+                    return img_path
+                metainfo = getattr(data_sample, 'metainfo', None)
+                if isinstance(metainfo, dict):
+                    img_path = metainfo.get('img_path') or metainfo.get('filename')
+                    if img_path:
+                        return img_path
+                if isinstance(data_batch, dict):
+                    if 'img_path' in data_batch:
+                        v = data_batch['img_path']
+                        if isinstance(v, (list, tuple)) and len(v) > idx:
+                            return v[idx]
+                        return v
+                    if 'img_metas' in data_batch:
+                        try:
+                            im = data_batch['img_metas']
+                            if isinstance(im, (list, tuple)) and len(im) > idx:
+                                im0 = im[idx]
+                                if isinstance(im0, dict):
+                                    return im0.get('img_path') or im0.get('filename')
+                        except Exception:
+                            pass
+                return None
 
-            img_path = data_sample.img_path
-            img_bytes = get(img_path, backend_args=self.backend_args)
-            img = mmcv.imfrombytes(img_bytes, channel_order='rgb')
+            img_path = _resolve_img_path_for_test(data_sample, data_batch, i)
+            if img_path is None:
+                # skip samples without a resolvable path
+                continue
+
+            window_name = f'test_{osp.basename(img_path)}'
+            try:
+                img_bytes = get(img_path, backend_args=self.backend_args)
+                img = mmcv.imfrombytes(img_bytes, channel_order='rgb')
+            except Exception:
+                continue
 
             self._visualizer.add_datasample(
                 window_name,

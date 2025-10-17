@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Test script to verify MMSegmentation 1.x upgrade
+This script checks for successful imports of required modules and verifies PyTorch installation.
 """
 
 import sys
@@ -62,11 +63,7 @@ def main():
         return False
 
     print()
-    print("🎉 All tests passed! MMSegmentation 1.x upgrade successful.")
-    print("\n📋 Next steps:")
-    print("1. Update your configuration files using the migration guide")
-    print("2. Test your training scripts")
-    print("3. Verify model compatibility")
+    print(" All tests passed! MMSegmentation 1.x upgrade successful.")
 
     return True
 

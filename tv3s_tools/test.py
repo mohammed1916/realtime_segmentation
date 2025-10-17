@@ -1,6 +1,7 @@
 import argparse
 import os
 
+import mmengine
 import mmcv
 import torch
 from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
@@ -8,7 +9,7 @@ from mmcv.runner import get_dist_info, init_dist, load_checkpoint
 from mmcv.utils import DictAction
 
 from utils.test import single_gpu_test, multi_gpu_test
-from mmseg.datasets import build_dataloader, build_dataset
+from mmengine.runner import build_dataloader, build_dataset
 from mmseg.models import build_segmentor
 from IPython import embed
 import warnings
@@ -103,7 +104,7 @@ def main():
     if args.out is not None and not args.out.endswith(('.pkl', '.pickle')):
         raise ValueError('The output file must be a pkl file.')
 
-    cfg = mmcv.Config.fromfile(args.config)
+    cfg = mmengine.config.Config.fromfile(args.config)
     if args.options is not None:
         cfg.merge_from_dict(args.options)
 
@@ -194,7 +195,7 @@ def main():
     if rank == 0:
         if args.out:
             print(f'\nwriting results to {args.out}')
-            mmcv.dump(outputs, args.out)
+            mmengine.fileio.dump(outputs, args.out)
         kwargs = {} if args.eval_options is None else args.eval_options
         if args.format_only:
             dataset.format_results(outputs, os.path.dirname(args.out), **kwargs)

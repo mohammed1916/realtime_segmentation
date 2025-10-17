@@ -25,13 +25,18 @@ def test_imports():
         from mmseg.models.segmentors.encoder_decoder_clips import EncoderDecoder_clips
         print("✓ EncoderDecoder_clips imported")
 
-        # Test TV3S dataset import
+        # Test dataset import (prefer local mmseg datasets)
         try:
-            from tv3s_utils.datasets.cityscapes import CityscapesDataset_clips
-            print("✓ CityscapesDataset_clips imported")
+            from mmseg.datasets.cityscapes_video import CityscapesDataset_clips
+            print("✓ CityscapesDataset_clips imported from mmseg.datasets")
         except ImportError:
-            print("⚠ CityscapesDataset_clips import failed (will be handled in training script)")
-            return False
+            print("⚠ CityscapesDataset_clips import failed from mmseg.datasets")
+            try:
+                from tv3s_utils.datasets.cityscapes import CityscapesDataset_clips
+                print("✓ CityscapesDataset_clips imported from tv3s_utils")
+            except ImportError:
+                print("⚠ CityscapesDataset_clips import failed (no dataset implementation found)")
+                return False
 
         return True
 

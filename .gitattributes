@@ -1,3 +1,9 @@
 *.json filter=lfs diff=lfs merge=lfs -text
 *.csv filter=lfs diff=lfs merge=lfs -text
+<<<<<<< HEAD
 *.onnx filter=lfs diff=lfs merge=lfs -text
+=======
+optimized_models filter=lfs diff=lfs merge=lfs -text
+optimized_models/** filter=lfs diff=lfs merge=lfs -text
+>>>>>>> pr-2
+*.txt filter=lfs diff=lfs merge=lfs -text

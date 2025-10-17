@@ -1,4 +1,5 @@
 import mmcv
+import mmengine
 import numpy as np
 import os.path as osp
 import tempfile
@@ -62,9 +63,9 @@ class CityscapesDataset2(CustomDataset2):
             list[str: str]: result txt files which contains corresponding
             semantic segmentation images.
         """
-        mmcv.mkdir_or_exist(imgfile_prefix)
+        mmengine.utils.mkdir_or_exist(imgfile_prefix)
         result_files = []
-        prog_bar = mmcv.ProgressBar(len(self))
+        prog_bar = mmengine.utils.ProgressBar(len(self))
         for idx in range(len(self)):
             result = results[idx]
             if to_label_id:
@@ -202,7 +203,7 @@ class CityscapesDataset2(CustomDataset2):
 
         # when evaluating with official cityscapesscripts,
         # **_gtFine_labelIds.png is used
-        for seg_map in mmcv.scandir(
+        for seg_map in mmengine.utils.scandir(
                 self.ann_dir, 'gtFine_labelIds.png', recursive=True):
             seg_map_list.append(osp.join(self.ann_dir, seg_map))
             pred_list.append(CSEval.getPrediction(CSEval.args, seg_map))
