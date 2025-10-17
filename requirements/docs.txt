@@ -1,4 +1,3 @@
-recommonmark
-sphinx
-sphinx_markdown_tables
-sphinx_rtd_theme
+version https://git-lfs.github.com/spec/v1
+oid sha256:ff8d73a7ffd3ee2debdc3468b375bf3a1e2be4e60b8854df68595e6ff3806c62
+size 64

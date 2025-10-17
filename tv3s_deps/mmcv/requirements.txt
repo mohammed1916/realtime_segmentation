@@ -1,5 +1,3 @@
-addict
-numpy
-pyyaml
-regex;sys_platform=='win32'
-yapf
+version https://git-lfs.github.com/spec/v1
+oid sha256:34d87078bea22c393a40527e54d4cce039c003731782c152ee6bccaa6726b663
+size 58

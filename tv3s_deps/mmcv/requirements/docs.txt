@@ -1,2 +1,3 @@
-m2r
-torch
+version https://git-lfs.github.com/spec/v1
+oid sha256:a54801d5d9567a9fdee65fb87d628a2408e61c4fe936a4bed9bfade2faecae49
+size 12

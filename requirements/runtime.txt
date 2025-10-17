@@ -1,5 +1,3 @@
-torch>=2.0.0
-torchvision>=0.15.0
-matplotlib
-numpy
-terminaltables
+version https://git-lfs.github.com/spec/v1
+oid sha256:1d0f13d650946dc4e757a1a3246cb7d1cb6b0e846dc1f5764fff719978a2905a
+size 70

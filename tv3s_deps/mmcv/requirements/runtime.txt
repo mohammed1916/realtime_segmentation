@@ -1,6 +1,3 @@
-addict
-numpy
-Pillow
-pyyaml
-regex;sys_platform=='win32'
-yapf
+version https://git-lfs.github.com/spec/v1
+oid sha256:2c1e9b034609ed6a6ae29b0847973b518a566ed77237839c628e47bce70165ef
+size 66
