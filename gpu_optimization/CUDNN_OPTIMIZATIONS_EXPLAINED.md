@@ -22,18 +22,12 @@ torch.backends.cudnn.benchmark = True
 
 When you perform a convolution with specific input shape (e.g., 512×512 input):
 
-1. **First run:** cuDNN tries multiple convolution algorithms:
-   - Implicit GEMM (matrix multiply approach)
-   - Explicit GEMM
-   - Winograd FFT (fast Fourier transform)
-   - Direct convolution
-   - etc.
+1. **First run:** cuDNN measures performance of different kernel implementations
+2. **Selection:** Records which one is fastest
+3. **Caching:** Stores the best result for that input shape
+4. **Subsequent runs:** Uses cached best implementation automatically
 
-2. **Measurement:** Times each algorithm and records results
-
-3. **Caching:** Stores the fastest algorithm for that input shape
-
-4. **Subsequent runs:** Uses cached best algorithm automatically
+(cuDNN internally chooses from its optimized convolution implementations - we don't manually select algorithms)
 
 ### Code impact in SegFormer:
 ```python
