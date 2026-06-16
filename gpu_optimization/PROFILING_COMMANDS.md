@@ -4,26 +4,70 @@
 
 ---
 
+## Important: Syntax Differences
+
+**PowerShell:** Use backtick `` ` `` for line continuation
+```powershell
+ncu --metrics metric1,metric2 `
+    -o output.ncu `
+    python script.py
+```
+
+**Bash:** Use backslash `\` for line continuation
+```bash
+ncu --metrics metric1,metric2 \
+    -o output.ncu \
+    python script.py
+```
+
+---
+
 ## Quick Start: Nsight Compute (Exact L1/L2 Metrics)
 
-### Command 1: Profile FP32 Baseline
+### Command 1: Profile FP32 Baseline (✓ WORKS)
 
+**PowerShell (use backtick for line continuation):**
+```powershell
+ncu --metrics l1tex__throughput,l1tex__average_hit_rate,l2_throughput,l2_hit_rate,sm__throughput `
+    -o profile_fp32.ncu `
+    python gpu_optimization/measure_iteration.py --model baseline --runs 10
+```
+
+**Bash (use backslash for line continuation):**
 ```bash
 ncu --metrics l1tex__throughput,l1tex__average_hit_rate,l2_throughput,l2_hit_rate,sm__throughput \
     -o profile_fp32.ncu \
     python gpu_optimization/measure_iteration.py --model baseline --runs 10
 ```
 
-### Command 2: Profile FP16 Mixed Precision
+### Command 2: Profile FP16 Mixed Precision (✓ TESTED)
 
+**PowerShell (use backtick):**
+```powershell
+ncu --metrics l1tex__throughput,l1tex__average_hit_rate,l2_throughput,l2_hit_rate,sm__throughput `
+    -o profile_fp16.ncu `
+    python gpu_optimization/measure_iteration.py --model fp16 --runs 10
+```
+
+**Bash (use backslash):**
 ```bash
 ncu --metrics l1tex__throughput,l1tex__average_hit_rate,l2_throughput,l2_hit_rate,sm__throughput \
     -o profile_fp16.ncu \
     python gpu_optimization/measure_iteration.py --model fp16 --runs 10
 ```
 
+**Result:** Latency: 20.98 ± 0.62 ms (1.56x speedup from FP32)
+
 ### Command 3: Profile FP16 + TF32 (Production)
 
+**PowerShell (use backtick):**
+```powershell
+ncu --metrics l1tex__throughput,l1tex__average_hit_rate,l2_throughput,l2_hit_rate,sm__throughput `
+    -o profile_fp16_tf32.ncu `
+    python gpu_optimization/measure_iteration.py --model fp16_tf32 --runs 10
+```
+
+**Bash (use backslash):**
 ```bash
 ncu --metrics l1tex__throughput,l1tex__average_hit_rate,l2_throughput,l2_hit_rate,sm__throughput \
     -o profile_fp16_tf32.ncu \
